@@ -11,6 +11,7 @@ sys.path.append('external/dino-vit-features')
 
 
 datadir = "/home/nico/semesterproject/data/videos/3dod/Training/47670305/47670305_frames/lowres_wide/"
+# datadir = "/home/nico/semesterproject/data/Cityscapes/leftImg8bit_demoVideo/leftImg8bit/demoVideo/stuttgart_00/"
 fps = 15
 
 
@@ -22,7 +23,9 @@ def main():
 	images = get_image_it_from_folder(datadir, fps)
 
 	while True:
-		img = images.__next__()
+		image = images.__next__()
+		img = cv2.imread(image)
+		# img = cv2.resize(img, (256,192))
 		ui.img = img
 		prob, boxes = detector.detect(img)
 		show_img = img
