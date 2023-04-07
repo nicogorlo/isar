@@ -5,13 +5,11 @@ import torch
 
 from detector import Detector
 
-datadir = "/home/nico/semesterproject/data/videos/3dod/Training/47670305/47670305_frames/lowres_wide/"
 
 class UserInterface():
     def __init__(self, detector) -> None:
         # self.dataset = "/home/nico/semesterproject/data/videos/3dod/Training/47670305/47670305_frames/lowres_wide"
         self.ix,self.iy = -1,-1
-        self.datadir = datadir
 
         self.fps = 15 #1/s
         self.reid_on = False
