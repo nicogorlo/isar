@@ -30,7 +30,7 @@ class SegmentorSAM():
 
     def __call__(self, image: np.ndarray, bbox: np.array) -> np.ndarray:
 
-        with performance_measure("segmentation: "):
+        with performance_measure("segmentation"):
             self.predictor.set_image(image)
 
             mask, _, _ = self.predictor.predict(
@@ -44,11 +44,11 @@ class SegmentorSAM():
 
         return mask_img
 
-    def show_mask(self, mask, random_color=False):
+    def show_mask(self, mask: np.ndarray, random_color=False):
         if random_color:
             color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
         else:
-            color = np.array([30/255, 144/255, 255/255, 0.6])
+            color = np.array([0, 0, 255])
         h, w = mask.shape[-2:]
         mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
         

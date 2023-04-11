@@ -53,16 +53,8 @@ class OW_DETR():
         self.model.eval()
 
 
-    """
-    Args: 
-    * im: PIL image
-    Returns:
-    * bboxes_scaled: list of bounding boxes in format [x1, y1, x2, y2]
-    * scores: list of scores
-    * labels: list of labels
-    * keep: list of booleans indicating whether the box is kept
-    """
-    def __call__(self, im):
+
+    def __call__(self, im: np.ndarray):
         im = Image.fromarray(im.astype('uint8'), 'RGB')
         img = transform(im).unsqueeze(0)
         img=img.cuda()
@@ -77,7 +69,7 @@ class OW_DETR():
 
         # select 100 best boxes based on objectness score
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
         scores = topk_values
         topk_boxes = topk_indexes // out_logits.shape[2]
         labels = topk_indexes % out_logits.shape[2]
@@ -99,7 +91,7 @@ class OW_DETR():
         
         return scores, boxes, labels, keep
 
-    def box_cxcywh_to_xyxy(self, x):
+    def box_cxcywh_to_xyxy(self, x: torch.tensor) -> torch.tensor:
         x_c, y_c, w, h = x.unbind(-1)
         b = [(x_c - 0.5 * w), (y_c - 0.5 * h),
             (x_c + 0.5 * w), (y_c + 0.5 * h)]

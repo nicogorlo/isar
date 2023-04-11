@@ -23,6 +23,6 @@ returns an iterator that can be called for the next image in the folder with nex
 """
 def get_image_it_from_folder(datadir, fps) -> itertools.cycle:
 
-    images = itertools.cycle([datadir + image for image in sorted(os.listdir(datadir))])
+    images = itertools.cycle([image for image in sorted(os.listdir(datadir))])
     
     return images

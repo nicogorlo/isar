@@ -13,8 +13,10 @@ class UserInterface():
 
         self.fps = 15 #1/s
         self.reid_on = False
+        self.detector = detector
 
         cv2.namedWindow('image')
+        cv2.createButton('ReID', self.on_button_press, None, cv2.QT_PUSH_BUTTON|cv2.QT_NEW_BUTTONBAR, 0)
         cv2.namedWindow('freeze')
         cv2.namedWindow('cutout')
         cv2.namedWindow('seg')
@@ -31,8 +33,6 @@ class UserInterface():
         self.detect_frame = np.zeros((192,256,3), np.uint8)
         cv2.imshow('freeze', self.detect_frame)
         cv2.imshow('image', self.img)
-        
-        self.detector = detector
 
 
     def select(self, event, x,y,flags,param):
@@ -42,7 +42,7 @@ class UserInterface():
             cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x, y, self.img)
 
             cv2.imshow('cutout', cutout)
-            cv2.imshow('seg', seg)
+            # cv2.imshow('seg', seg)
             self.plot_single_box(self.img, selected_prob, selected_box)
             cv2.imshow('freeze', freeze)
 
@@ -55,13 +55,20 @@ class UserInterface():
 
 
     def plot_boxes(self, img, prob, boxes):
-        for p, (xmin, ymin, xmax, ymax), c in zip(prob, boxes.tolist(), self.detector.COLORS * 100):
+        for p, (xmin, ymin, xmax, ymax), c in zip(prob, boxes.tolist(), np.random.random((len(boxes), 3)) * 255):
             xmin=int(xmin); xmax=int(xmax); ymin=int(ymin); ymax=int(ymax)
             cv2.rectangle(img, pt1=np.array([xmin, ymin]), pt2=np.array([xmax,ymax]),
                                     color=c, thickness=1)
             # cl = p.argmax()
             # text = f'{self.detector.CLASSES[cl]}: {p[cl]:0.2f}'
-            # cv2.putText(img = img, org = (xmin, ymin-2), text=text, fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=0.9, color=c, thickness=2)
+            # cv2.putText(img = img, org = (xmin, ymin-2), text=text,
+            #             fontFace=cv2.FONT_HERSHEY_COMPLEX_SMALL, fontScale=0.9, 
+            #             color=c, thickness=2)
+        # most objectness:
+        (xmin, ymin, xmax, ymax) = boxes[prob.argmax()]
+        xmin=int(xmin); xmax=int(xmax); ymin=int(ymin); ymax=int(ymax)
+        cv2.rectangle(img, pt1=np.array([xmin, ymin]), pt2=np.array([xmax,ymax]),
+                                color=(0,0,255), thickness=2)
 
 
     def draw(self, mask):
@@ -69,3 +76,7 @@ class UserInterface():
         masked_img = np.where(mask[...,None], color, self.img)
         self.detect_frame = cv2.addWeighted(self.detect_frame, 0.8, masked_img, 0.2,0)
         self.img = cv2.addWeighted(self.img, 0.8, masked_img, 0.2,0)
+
+    
+    def on_button_press(self, *args):
+        self.detector.on_button_press()
