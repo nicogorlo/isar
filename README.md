@@ -13,3 +13,10 @@ ISAR builds on and utilizes previous works such as [OW-DETR][ow_detr_link]  (whi
 [u2_net_link]: https://github.com/xuebinqin/U-2-Net
 [clip_link]: https://github.com/openai/CLIP
 [SAM_link]: https://github.com/facebookresearch/segment-anything
+
+
+## TODO:
+* Improve Bounding Box Proposals
+* Extend feature vector
+* Support Multi-object tracking and Re-ID
+* Clean up code, move reid stuff from detector.py to reidentification.py

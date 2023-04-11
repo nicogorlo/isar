@@ -8,6 +8,8 @@ import torch
 import util.misc as utils
 from models import build_model
 
+from params import NUM_BOXES
+
 # standard PyTorch mean-std input image normalization
 transform = T.Compose([
     T.Resize(800),
@@ -59,7 +61,7 @@ class OW_DETR():
         
         # select 100 best boxes based on objectness score
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), NUM_BOXES, dim=1)
         scores = topk_values
         topk_boxes = topk_indexes // out_logits.shape[2]
         labels = topk_indexes % out_logits.shape[2]

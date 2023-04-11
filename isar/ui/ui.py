@@ -11,7 +11,6 @@ class UserInterface():
         # self.dataset = "/home/nico/semesterproject/data/videos/3dod/Training/47670305/47670305_frames/lowres_wide"
         self.ix,self.iy = -1,-1
 
-        self.fps = 15 #1/s
         self.reid_on = False
         self.detector = detector
 

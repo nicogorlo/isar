@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import os
 
 import torch
 from torch import nn
@@ -13,7 +14,8 @@ from util.isar_utils import performance_measure
 from owdetr_img_inference import OW_DETR
 
 from segmentor import SegmentorSAM, SegmentorU2
-         
+
+from params import OUTDIR, KEEP_LOGITS, KEEP_OBJECTNESS, ADA_THRESH_MAX_OVERLAP, ADA_THRESH_MULTIPLIER
 
 
 class Detector():
@@ -21,7 +23,7 @@ class Detector():
         # self.segmentor = SegmentorU2()
         self.segmentor = SegmentorSAM()
         self.reid = Reidentification()
-        self.ow_detr = OW_DETR(keep_logits=0.7, keep_objectness=0.0)
+        self.ow_detr = OW_DETR(keep_logits=KEEP_LOGITS, keep_objectness=KEEP_OBJECTNESS)
 
         self.transform = T.Compose([
             T.Resize(800),
@@ -76,16 +78,16 @@ class Detector():
                 seg = self.segmentor(image, match)
                 dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
                 dst = self.visualize_scores(seg, dst, color=(0,255,0))
-                # cv2.imwrite(f'/home/nico/semesterproject/test/breakdance/{image_name}', dst)
                 cv2.imshow('seg', dst)
                 cv2.imshow('match', self.get_cutout(image, match))
+
             else: 
                 print("no match found")
                 seg = np.zeros(image.shape)
                 dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
                 dst = self.visualize_scores(seg, dst, color=(0,0,255))
-                # cv2.imwrite(f'/home/nico/semesterproject/test/breakdance/{image_name}', dst)
 
+            cv2.imwrite(os.path.join(OUTDIR, image_name), dst)
             self.it+=1
 
         return scores[0, keep], boxes[0, keep], seg
@@ -165,7 +167,7 @@ class Detector():
         count = 0
         sum = 0
         while i < boundary:
-            if self.calculate_IoSmallerBox(torch.tensor(box_sims[i]["box"]), torch.tensor(box_sims[0]["box"])) > 0.4:
+            if self.calculate_IoSmallerBox(torch.tensor(box_sims[i]["box"]), torch.tensor(box_sims[0]["box"])) > ADA_THRESH_MAX_OVERLAP:
                 boundary = min(boundary+1, len(box_sims))
                 i+=1
                 continue
@@ -180,9 +182,9 @@ class Detector():
         else:
             meansim = sum / count
         print("mean similarity of 5 next best: ", meansim)
-        print("threshold: ", meansim * 1.05)
-        self.adaptive_threshold = meansim * 1.05
-        if max_sim < meansim * 1.05:
+        print("threshold: ", meansim * ADA_THRESH_MULTIPLIER)
+        self.adaptive_threshold = meansim * ADA_THRESH_MULTIPLIER
+        if max_sim < meansim * ADA_THRESH_MULTIPLIER:
             # cv2.rectangle(img, (box_sims[0]["box"][0], box_sims[0]["box"][1]), (box_sims[0]["box"][2], box_sims[0]["box"][3]), (0,0,255), 2)
             return None
         else:
