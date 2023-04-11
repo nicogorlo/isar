@@ -10,8 +10,6 @@ torch.set_grad_enabled(False)
 import PIL
 from PIL import Image
 
-from panopticapi.utils import id2rgb, rgb2id
-
 from util.isar_utils import performance_measure
 
 from segment_anything import sam_model_registry, SamPredictor

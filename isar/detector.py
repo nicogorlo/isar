@@ -1,34 +1,16 @@
-import requests
-import matplotlib.pyplot as plt
 import numpy as np
-import os
-import io
 import cv2
 
 import torch
 from torch import nn
-from torchvision.models import resnet50
 import torchvision.transforms as T
 torch.set_grad_enabled(False)
 
-import itertools
-import seaborn as sns
-
-import PIL
-from PIL import Image
-
-import panopticapi
-from panopticapi.utils import id2rgb, rgb2id
-
 from reidentification import Reidentification
-
-from time import time
 
 from util.isar_utils import performance_measure
 
 from owdetr_img_inference import OW_DETR
-
-from segment_anything import sam_model_registry, SamPredictor
 
 from segmentor import SegmentorSAM, SegmentorU2
          
