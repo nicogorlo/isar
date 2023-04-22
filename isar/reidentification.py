@@ -20,10 +20,13 @@ class Reidentification():
 
     def extract_img_feat(self, img: np.ndarray):
         image = self.preprocess(Image.fromarray(img[:,:,::-1])).unsqueeze(0).to(self.device)
+        image_mirrored = self.preprocess(Image.fromarray(img[:,::-1,::-1])).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
             image_features = self.model.encode_image(image)
+            image_features_mirrored = self.model.encode_image(image_mirrored)
         
+        image_features = (image_features + image_features_mirrored)
         image_features /= image_features.norm(dim=-1, keepdim=True)
 
         return image_features.squeeze()
