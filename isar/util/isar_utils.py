@@ -21,7 +21,7 @@ class performance_measure:
 """
 returns an iterator that can be called for the next image in the folder with next(iterator)
 """
-def get_image_it_from_folder(datadir, fps) -> itertools.cycle:
+def get_image_it_from_folder(datadir) -> itertools.cycle:
 
     images = itertools.cycle([image for image in sorted(os.listdir(datadir))])
     

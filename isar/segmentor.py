@@ -16,10 +16,13 @@ from segment_anything import sam_model_registry, SamPredictor
 
 
 class SegmentorSAM():
-    def __init__(self) -> None:
-        sam_checkpoint = "modelzoo/sam_vit_h_4b8939.pth"
-        device = "cpu"
-        model_type = "default"
+    def __init__(self, device, model_type) -> None:
+        device = device  ## RIGHT now running on CPU, as Laptop GPU memory not sufficient
+        model_type = model_type
+        sam_checkpoint = os.path.join('modelzoo', [i for i in os.listdir('modelzoo') if model_type in i][0])
+
+        self.use_precomputed_embedding = False
+        self.img_embedding_path = None
 
         self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         self.sam.to(device=device)

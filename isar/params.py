@@ -20,13 +20,22 @@ FPS: int = 15
 # IMG_DIR = os.path.join('leftImg8bit_demoVideo/leftImg8bit/demoVideo/', TASK)
 # EVAL_DIR = None
 
-# DAVIS:
-DATASET = 'DAVIS'
-TASK = "pigs"
-DATADIR = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/"
-IMGDIR = os.path.join("JPEGImages/480p/", TASK)
-EVALDIR = os.path.join("Annotations_unsupervised/480p/", TASK)
+# Habitat single object tracking:
+
+DATASET = 'Habitat_single_obj'
+TASK = 'apartment_1_loiter_bike'
+DATADIR = "/home/nico/semesterproject/data/habitat_single_object_tracking/"
+IMGDIR = os.path.join(DATADIR, TASK, "rgb")
+EVALDIR = os.path.join(DATADIR, TASK, "semantics")
 OUTDIR = os.path.join("/home/nico/semesterproject/test/", TASK)
+
+# DAVIS:
+# DATASET = 'DAVIS'
+# TASK = "drift-chicane"
+# DATADIR = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/"
+# IMGDIR = os.path.join("JPEGImages/480p/", TASK)
+# EVALDIR = os.path.join(DATADIR, "Annotations_unsupervised/480p/", TASK)
+# OUTDIR = os.path.join("/home/nico/semesterproject/test/", TASK)
 
 
 ## OW-DETR:

@@ -19,9 +19,9 @@ from params import OUTDIR, KEEP_LOGITS, KEEP_OBJECTNESS, ADA_THRESH_MAX_OVERLAP,
 
 
 class Detector():
-    def __init__(self):
-        # self.segmentor = SegmentorU2()
-        self.segmentor = SegmentorSAM()
+    def __init__(self, device = "cpu", sam_model_type = "vit_h"):
+
+        self.segmentor = SegmentorSAM(device, sam_model_type)
         self.reid = Reidentification()
         self.ow_detr = OW_DETR(keep_logits=KEEP_LOGITS, keep_objectness=KEEP_OBJECTNESS)
 
@@ -34,19 +34,21 @@ class Detector():
         self.prob: torch.Tensor = None
         self.boxes: torch.Tensor = None
 
-        self.min_similarity = 0.60
+        self.outdir = OUTDIR
 
         self.cutout_features = None
 
+        self.show_images = True
+
         self.start_reid = False
 
-        self.reid_toggle = False
-        self.seg_toggle = False
+        self.object_center = None
 
         self.it = 0
 
         ## for verbose
         self.adaptive_threshold = 0.7
+        self.fixed_threshold = 0.87
         self.max_sim = 0.0
 
 
@@ -77,17 +79,22 @@ class Detector():
             if match is not None:
                 seg = self.segmentor(image, match)
                 dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
-                dst = self.visualize_scores(seg, dst, color=(0,255,0))
-                cv2.imshow('seg', dst)
-                cv2.imshow('match', self.get_cutout(image, match))
+
+                if self.show_images: 
+                    dst = self.visualize_scores(seg, dst, color=(0,255,0))
+                    cv2.rectangle (dst, (match[0], match[1]), (match[2], match[3]), (0,255,0), 2)
+                    cv2.imshow('seg', dst)
+                    cv2.imshow('match', self.get_cutout(image, match))
 
             else: 
                 print("no match found")
                 seg = np.zeros(image.shape)
                 dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
-                dst = self.visualize_scores(seg, dst, color=(0,0,255))
 
-            cv2.imwrite(os.path.join(OUTDIR, image_name), dst)
+                if self.show_images:
+                    dst = self.visualize_scores(seg, dst, color=(0,0,255))
+
+            cv2.imwrite(os.path.join(self.outdir, image_name), dst)
             self.it+=1
 
         return scores[0, keep], boxes[0, keep], seg
@@ -131,6 +138,13 @@ class Detector():
             print("start reid")
         else:
             print("stop reid")
+
+    
+    def compute_object_center(self, seg):
+        """
+        compute the center of the object
+        """
+        pass
 
     def get_most_similar_box(self, img: np.ndarray):
         sims = []
@@ -181,10 +195,10 @@ class Detector():
             meansim = 0.5
         else:
             meansim = sum / count
-        print("mean similarity of 5 next best: ", meansim)
-        print("threshold: ", meansim * ADA_THRESH_MULTIPLIER)
-        self.adaptive_threshold = meansim * ADA_THRESH_MULTIPLIER
-        if max_sim < meansim * ADA_THRESH_MULTIPLIER:
+        # print("mean similarity of 5 next best: ", meansim)
+        # print("threshold: ", meansim * ADA_THRESH_MULTIPLIER)
+        # self.adaptive_threshold = meansim * ADA_THRESH_MULTIPLIER
+        if max_sim < self.fixed_threshold: # self.adaptive_threshold:
             # cv2.rectangle(img, (box_sims[0]["box"][0], box_sims[0]["box"][1]), (box_sims[0]["box"][2], box_sims[0]["box"][3]), (0,0,255), 2)
             return None
         else:

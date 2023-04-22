@@ -8,7 +8,7 @@ import torch
 import util.misc as utils
 from models import build_model
 
-from params import NUM_BOXES
+from params import NUM_BOXES, KEEP_LOGITS, KEEP_OBJECTNESS
 
 # standard PyTorch mean-std input image normalization
 transform = T.Compose([
@@ -31,14 +31,14 @@ class OW_DETR():
 
         # not used
         utils.init_distributed_mode(self.args)
-        print("git:\n  {}\n".format(utils.get_sha()))
+        # print("git:\n  {}\n".format(utils.get_sha()))
 
         self.device = torch.device(self.args.device)
 
         self.model, self.criterion, self.postprocessors = build_model(self.args)
         self.model.to(self.device)
         checkpoint = torch.load(self.args.resume, map_location='cpu')
-        print(checkpoint.keys())
+        # print(checkpoint.keys())
         self.model.load_state_dict(checkpoint['model'], strict=False)
         if torch.cuda.is_available():
             self.model.cuda()
@@ -59,7 +59,7 @@ class OW_DETR():
         prob = torch.nn.functional.softmax(out_logits, -1)[0, :, :-1]
         keep = prob.max(-1).values > self.keep_logits
         
-        # select 100 best boxes based on objectness score
+        # select NUM_BOXES best boxes based on objectness score
         prob = out_logits.sigmoid()
         topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), NUM_BOXES, dim=1)
         scores = topk_values
