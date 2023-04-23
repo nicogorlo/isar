@@ -14,21 +14,21 @@ ISAR builds on and utilizes previous works such as [OW-DETR][ow_detr_link]  (whi
 [clip_link]: https://github.com/openai/CLIP
 [SAM_link]: https://github.com/facebookresearch/segment-anything
 
-## Data structure:
+## Folder structure:
 the datasets are structured as follows:
 
---Dataset_name
-   |--Scene_name
-      |--rgb
-         |--xxxxxxx.jpg
-         |-- ...
-      |--semantics
-         |--xxxxxxx.jpg
-         |-- ...
-      |--(optional:embeddings)
-         |--xxxxxxx.pt
-         |-- ...
-   |-- ...
+Dataset_name <br>
+|--Scene_name <br>
+---|--rgb <br>
+------|--xxxxxxx.jpg <br>
+------|-- ... <br>
+---|--semantics <br>
+------|--xxxxxxx.jpg <br>
+------|-- ... <br>
+---|--(optional:embeddings) <br>
+------|--xxxxxxx.pt <br>
+------|-- ... <br>
+|-- ... <br>
 
 ## TODO:
 * Support Multi-object tracking and Re-ID
