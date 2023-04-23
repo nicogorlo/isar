@@ -1,5 +1,6 @@
 import numpy as np
 import cv2
+import os
 
 import torch
 from torch import nn
@@ -22,19 +23,64 @@ class SegmentorSAM():
         sam_checkpoint = os.path.join('modelzoo', [i for i in os.listdir('modelzoo') if model_type in i][0])
 
         self.use_precomputed_embedding = False
-        self.img_embedding_path = None
 
         self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         self.sam.to(device=device)
 
         self.predictor = SamPredictor(self.sam)
 
-    def __call__(self, image: np.ndarray, bbox: np.array) -> np.ndarray:
+    def __call__(self, image: np.ndarray, bbox: np.array, embedding = None) -> np.ndarray:
+        """
+        Args:
+            image (np.ndarray): image to segment
+            bbox (np.ndarray): bounding box of object to segment
+            embedding (str): path to precomputed embedding
+        Returns:
+            mask_img (np.ndarray): three channel image of mask
+
+        
+        """
 
         with performance_measure("segmentation"):
-            self.predictor.set_image(image)
 
-            mask, _, _ = self.predictor.predict(
+            # get image embedding:
+            # precomputed_embeddings:
+            if self.use_precomputed_embedding and embedding is not None:
+                if os.path.exists(embedding):
+                    input_image = self.predictor.transform.apply_image(image)
+                    input_image_torch = torch.as_tensor(input_image, device=self.predictor.device)
+                    input_image_torch = input_image_torch.permute(2, 0, 1).contiguous()[None, :, :, :]
+
+                    assert (
+                        len(input_image_torch.shape) == 4
+                        and input_image_torch.shape[1] == 3
+                        and max(*input_image_torch.shape[2:]) == self.predictor.model.image_encoder.img_size
+                    ), f"set_torch_image input must be BCHW with long side {self.predictor.model.image_encoder.img_size}."
+                    self.predictor.reset_image()
+
+                    self.predictor.original_size = image.shape[:2]
+                    self.predictor.input_size = tuple(input_image_torch.shape[-2:])
+                    self.predictor.features = torch.load(embedding, map_location=self.predictor.device)
+                    self.predictor.is_image_set = True
+                
+                # no precomputed embeddings available:
+                else:
+                    self.predictor.set_image(image, image_format='BGR')
+
+                    if not os.path.exists(os.path.split(embedding)[0]):
+                        os.makedirs(os.path.split(embedding)[0])
+
+                    if not os.path.exists(embedding):
+                        features = self.predictor.get_image_embedding()
+                        torch.save(features, embedding)
+
+            else:
+                self.predictor.set_image(image, image_format='BGR')
+
+            # mask: np.ndarray, binary mask of shape (1, H, W)
+            # quality (float): quality of the mask [0, 1]
+            # mask_lowres: np.ndarray, binary mask of the object in a resized image of shape (1, 256, 256)
+            mask, mask_qualities, mask_lowres = self.predictor.predict(
                 point_coords=None,
                 point_labels=None,  
                 box=bbox,
@@ -84,7 +130,7 @@ class SegmentorU2():
         self.transform=transforms.Compose([RescaleT(320), ToTensorLab(flag=0)])
 
 
-    def __call__(self, image: np.ndarray, bbox: np.ndarray) -> np.ndarray:
+    def __call__(self, image: np.ndarray, bbox: np.ndarray, emb: torch.Tensor) -> np.ndarray:
 
         cutout = self.get_cutout(image, bbox)
 
@@ -116,7 +162,7 @@ class SegmentorU2():
     def get_cutout(self, img: np.ndarray, bbox: np.ndarray) -> np.ndarray:
         return img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
     
-    def normPRED(self,d: torch.tensor) -> torch.tensor:
+    def normPRED(self,d: torch.Tensor) -> torch.Tensor:
         ma = torch.max(d)
         mi = torch.min(d)
 

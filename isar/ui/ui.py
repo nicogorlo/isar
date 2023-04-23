@@ -30,6 +30,8 @@ class UserInterface():
 
         self.img = np.zeros((192,256,3), np.uint8)
         self.detect_frame = np.zeros((192,256,3), np.uint8)
+        self.embedding = None
+
         cv2.imshow('freeze', self.detect_frame)
         cv2.imshow('image', self.img)
 
@@ -38,7 +40,7 @@ class UserInterface():
         if event == cv2.EVENT_LBUTTONDOWN:
             self.reid_on = True
             self.ix,self.iy = x,y
-            cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x, y, self.img)
+            cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x, y, self.img, self.embedding)
 
             cv2.imshow('cutout', cutout)
             # cv2.imshow('seg', seg)

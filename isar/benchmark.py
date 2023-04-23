@@ -22,6 +22,8 @@ class Benchmark():
 
         self.detector.show_images = False
 
+        self.detector.segmentor.use_precomputed_embedding = True
+
         self.outdir = outdir
 
 
@@ -54,12 +56,13 @@ class Benchmark():
 
             imgdir = os.path.join(taskdir, task, 'rgb/')
             evaldir = os.path.join(taskdir, task, 'semantics/')
-            task_stats = self.run_task(task, imgdir, evaldir, prompt_dict[task])
+            embdir = os.path.join(taskdir, task, 'embeddings/')
+            task_stats = self.run_task(task, imgdir, evaldir, embdir, prompt_dict[task])
             dataset_stats[task] = task_stats
 
         return dataset_stats
         
-    def run_task(self, task, imgdir, evaldir, prompt=None):
+    def run_task(self, task, imgdir, evaldir, embdir, prompt=None):
 
         self.detector.outdir = os.path.join(self.outdir, task)
         
@@ -72,15 +75,17 @@ class Benchmark():
 
         if prompt is not None:
             img0 = cv2.imread(os.path.join(imgdir, image_names[0]))
-            prob, boxes, seg = self.detector.detect(img0, image_names[0])
-            cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x = prompt['x'], y = prompt['y'], img = img0)
+            emb0 = os.path.join(embdir, image_names[0].replace(".jpg", ".pt"))
+            prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
+            cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x = prompt['x'], y = prompt['y'], img = img0, embedding=emb0)
             image_names.pop(0)
 
 
         for image_name in image_names:
             img = cv2.imread(os.path.join(imgdir, image_name))
+            emb = os.path.join(embdir, image_name.replace(".jpg", ".pt"))
 
-            prob, boxes, seg = self.detector.detect(img, image_name)
+            prob, boxes, seg = self.detector.detect(img, image_name, emb)
 
             if self.detector.start_reid:
                 eval.compute_evaluation_metrics(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image_name), image_name)

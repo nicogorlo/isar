@@ -65,19 +65,21 @@ class Detector():
         b = b * torch.tensor([img_w, img_h, img_w, img_h], dtype=torch.float32)
         return b
     
-    def detect(self, image: np.ndarray, image_name):
-        scores, boxes, labels, keep = self.ow_detr(image)
+    def detect(self, image: np.ndarray, image_name: str, embedding: str):
+        with performance_measure("OW DETR boxes"):
+            scores, boxes, labels, keep = self.ow_detr(image)
 
-        self.prob = scores[0, keep]
-        self.boxes = boxes[0, keep]
+            self.prob = scores[0, keep]
+            self.boxes = boxes[0, keep]
 
         seg = None
 
         if self.start_reid:
-            match = self.get_most_similar_box(image)
+            with performance_measure("Get most similar box"):
+                match = self.get_most_similar_box(image)
 
             if match is not None:
-                seg = self.segmentor(image, match)
+                seg = self.segmentor(image, match, embedding)
                 dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
 
                 if self.show_images: 
@@ -114,7 +116,7 @@ class Detector():
         return img[bbox[1]:bbox[3], bbox[0]:bbox[2]]
     
 
-    def on_click(self, x: int, y: int, img: np.ndarray):
+    def on_click(self, x: int, y: int, img: np.ndarray, embedding: str):
         print('selected coordinates - (x: {}, y: {})'.format(x, y))
         selected_prob, selected_box = self.contains(self.prob, self.boxes, x, y)
 
@@ -125,7 +127,7 @@ class Detector():
         with performance_measure("CLIP feature extraction"):
             self.cutout_features = self.reid.extract_img_feat(cutout)
 
-        seg = self.segmentor(img, selected_box[0].cpu().numpy().astype(int))
+        seg = self.segmentor(img, selected_box[0].cpu().numpy().astype(int), embedding)
 
         freeze = img
 
