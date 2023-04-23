@@ -33,10 +33,11 @@ class Evaluation():
 
     
     def get_gt_mask(self, image_name):
-        gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name))
-        if gt_mask is None:
+        if os.path.exists(os.path.join(self.eval_dir, image_name)):
+            gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name))
+        elif os.path.exists(os.path.join(self.eval_dir, image_name.replace('jpg', 'png'))):
             gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name.replace('jpg', 'png')))
-        if gt_mask is None:
+        else:
             raise Exception("No ground truth mask found for image {}".format(image_name))
         gt_mask = cv2.cvtColor(gt_mask, cv2.COLOR_BGR2GRAY)
         gt_mask = gt_mask > 0
@@ -61,12 +62,12 @@ class Evaluation():
 
     
     def false_detection_rate_not_visible_counter(self, mask, gt_mask):
-        if sum(gt_mask) == 0 and np.sum(mask) > 0:
+        if np.sum(gt_mask) == 0 and np.sum(mask) > 0:
             self.false_detection_not_visible += 1
             # print("object lost")
 
     def object_visible_gt_counter(self, gt_mask):
-        if sum(gt_mask) == 0:
+        if np.sum(gt_mask) == 0:
             self.total_frames_not_visible += 1
             # print("object not visible")
         else:
