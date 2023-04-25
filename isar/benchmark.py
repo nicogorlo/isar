@@ -103,7 +103,8 @@ class Benchmark():
 from datetime import datetime
 
 def main():
-
+    
+    bm = Benchmark("/home/nico/semesterproject/test/")
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
     bm.run_dataset('DAVIS_single_obj')
