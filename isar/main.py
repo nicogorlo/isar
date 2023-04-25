@@ -20,8 +20,8 @@ fps = 10
 
 def main():
 
-	if not os.path.exists(os.path.join("/home/nico/semesterproject/test/", TASK)):
-		os.makedirs(os.path.join("/home/nico/semesterproject/test/", TASK))
+	if not os.path.exists(OUTDIR):
+		os.makedirs(OUTDIR)
 	
 	use_precomputed_embeddings = True
 	detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
