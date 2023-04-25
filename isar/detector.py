@@ -47,19 +47,21 @@ class Detector():
         self.fixed_threshold = 0.87
         self.max_sim = 0.0
 
-    
+
     def detect(self, img: np.ndarray, image_name: str, embedding: str):
         with performance_measure("OW DETR boxes"):
             scores, boxes, labels, keep = self.ow_detr(img)
 
+            
             #threshold boxes to image boundaries:
-            torch.clamp(boxes[:,0], 0, img.shape[1], out=boxes[:,0])
-            torch.clamp(boxes[:,1], 0, img.shape[0], out=boxes[:,1])
-            torch.clamp(boxes[:,2], 0, img.shape[1], out=boxes[:,2])
-            torch.clamp(boxes[:,3], 0, img.shape[0], out=boxes[:,3])
+            torch.clamp(boxes[0,:,0], 0.0, img.shape[1], out=boxes[0,:,0])
+            torch.clamp(boxes[0,:,1], 0.0, img.shape[0], out=boxes[0,:,1])
+            torch.clamp(boxes[0,:,2], 0.0, img.shape[1], out=boxes[0,:,2])
+            torch.clamp(boxes[0,:,3], 0.0, img.shape[0], out=boxes[0,:,3])
 
             self.prob = scores[0, keep]
             self.boxes = boxes[0, keep]
+
 
         seg = None
 

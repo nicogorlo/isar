@@ -99,13 +99,15 @@ class Benchmark():
         task_stats = eval.report_results(task)
     
         return task_stats
+    
+from datetime import datetime
 
 def main():
 
-    bm = Benchmark("/home/nico/semesterproject/test/")
-    bm.run()
-    
-    stat_path = os.path.join(bm.outdir, "stats.json")
+    now = datetime.now()
+    now_str = now.strftime("%Y_%m_%d_%H%M%S")
+    bm.run_dataset('DAVIS_single_obj')
+    stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
         json.dump(bm.stats, f, indent=4)
