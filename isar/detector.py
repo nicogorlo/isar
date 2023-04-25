@@ -13,7 +13,7 @@ from util.isar_utils import performance_measure
 
 from owdetr_img_inference import OW_DETR
 
-from segmentor import SegmentorSAM, SegmentorU2
+from segmentor import SegmentorSAM
 
 from params import OUTDIR, KEEP_LOGITS, KEEP_OBJECTNESS, ADA_THRESH_MAX_OVERLAP, ADA_THRESH_MULTIPLIER
 
