@@ -3,6 +3,7 @@ import cv2
 import os
 from ui.ui import UserInterface
 from detector import Detector
+from sam_detector import SAMDetector
 from reidentification import Reidentification
 from util.isar_utils import get_image_it_from_folder
 from evaluation import Evaluation
@@ -25,6 +26,8 @@ def main():
 	
 	use_precomputed_embeddings = True
 	detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
+	detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings, n_per_side=32)
+
 	ui = UserInterface(detector=detector)
 	if DATASET == 'DAVIS' or DATASET == 'Habitat_single_obj':
 		eval = Evaluation(EVALDIR)
@@ -55,6 +58,10 @@ def main():
 
 		if detector.start_reid:
 			ui.plot_boxes(show_img, prob, boxes)
+		
+		if detector.__class__ == SAMDetector and detector.show_images:
+			for point in detector.point_grid:
+				cv2.circle(show_img, (int(point[1]*show_img.shape[1]), int(point[0]*show_img.shape[0])), radius=4, color=(255, 255, 255), thickness=-1)
 		
 		cv2.imshow('image', show_img)
 		

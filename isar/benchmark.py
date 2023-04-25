@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from detector import Detector
+from sam_detector import SAMDetector
 from reidentification import Reidentification
 from evaluation import Evaluation
 from util.isar_utils import get_image_it_from_folder
@@ -16,6 +17,7 @@ class Benchmark():
         self.datadir_DAVIS = "/home/nico/semesterproject/data/DAVIS_single_object_tracking"
         self.datadir_Habitat_single_obj = "/home/nico/semesterproject/data/habitat_single_object_tracking/"
 
+        # self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, n_per_side=16)
         self.detector = Detector("cpu", "vit_h")
 
         self.stats = {}
@@ -27,6 +29,7 @@ class Benchmark():
         if self.detector.show_images:
             cv2.namedWindow("seg")
 
+        self.use_gt_mask_first_image = False
 
     "iterate over all datasets (DAVIS_single_obj, Habitat_single_obj)"
     def run(self):
@@ -52,7 +55,7 @@ class Benchmark():
         dataset_stats = {}
 
         
-        for task in [i for i in sorted(os.listdir(taskdir)) if ".json" not in i][:50]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "plastic" in i)][:]:
             print("Task: ", task)
 
             imgdir = os.path.join(taskdir, task, 'rgb/')
@@ -80,6 +83,13 @@ class Benchmark():
             emb0 = os.path.join(embdir, image_names[0].replace(".jpg", ".pt"))
             prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
             cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x = prompt['x'], y = prompt['y'], img = img0, embedding=emb0)
+
+            if self.detector.__class__ == SAMDetector and self.use_gt_mask_first_image:
+                mask = eval.get_gt_mask(image_names[0])
+                img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
+                transposed_features = img_features.transpose(1, 2, 0)
+                mask_embedding = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                self.detector.template_feature = mask_embedding
             image_names.pop(0)
 
 
@@ -92,6 +102,17 @@ class Benchmark():
             if self.detector.start_reid:
                 eval.compute_evaluation_metrics(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image_name), image_name)
 
+            if self.detector.__class__ == SAMDetector and self.use_gt_mask_first_image:
+                self.detector.set_img_embedding(img, emb)
+                mask = eval.get_gt_mask(image_name)
+                img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
+                transposed_features = img_features.transpose(1, 2, 0)
+                mask_embedding = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                gt_mask_descriptor = mask_embedding
+                nearest_neighbor_index, nearest_neighbor_descriptor, min_distance = self.detector.get_nearest_neighbor_descriptor([gt_mask_descriptor])
+                print("distance of gt to template: ", min_distance)
+                self.detector.predictor.reset_image()
+                
 
             if self.detector.show_images:
                 cv2.waitKey(1)
@@ -103,6 +124,7 @@ class Benchmark():
 def main():
 
     bm = Benchmark("/home/nico/semesterproject/test/")
+    bm.use_gt_mask_first_image = True
     bm.run()
     
     stat_path = os.path.join(bm.outdir, "stats.json")
