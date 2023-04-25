@@ -22,7 +22,7 @@ class Evaluation():
     def compute_IoU(self, seg1, seg2):
         intersection = np.logical_and(seg1, seg2)
         union = np.logical_or(seg1, seg2)
-        if sum(union) == 0:
+        if np.sum(union) == 0:
             return 1.0
         else: 
             iou_score = np.sum(intersection) / np.sum(union)
@@ -97,4 +97,4 @@ class Evaluation():
         print("false detection ratio visible: {}".format(false_detection_rate_visible))
         print("false detection ratio not visible: {}".format(false_detection_rate_not_visible))
 
-        return {scene_name: {'mIoU': self.mIoU, 'misclassifications': self.misclassifications, 'false_detection_ratio_visible': false_detection_rate_visible, 'false_detection_ratio_not_visible': false_detection_rate_not_visible}}
+        return {scene_name: {'mIoU': self.mIoU, 'misclassification_rate': self.misclassifications/len(self.ious), 'false_detection_ratio_visible': false_detection_rate_visible, 'false_detection_ratio_not_visible': false_detection_rate_not_visible}}
