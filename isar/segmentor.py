@@ -26,7 +26,7 @@ class SegmentorSAM():
 
         self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         self.sam.to(device=device)
-
+        
         self.predictor = SamPredictor(self.sam)
 
     def __call__(self, image: np.ndarray, bbox: np.array, embedding = None) -> np.ndarray:
@@ -77,16 +77,16 @@ class SegmentorSAM():
             else:
                 self.predictor.set_image(image, image_format='BGR')
 
-            # mask: np.ndarray, binary mask of shape (1, H, W)
+            # mask (np.ndarray): binary mask of shape (1, H, W)
             # quality (float): quality of the mask [0, 1]
             # mask_lowres: np.ndarray, binary mask of the object in a resized image of shape (1, 256, 256)
             mask, mask_qualities, mask_lowres = self.predictor.predict(
                 point_coords=None,
-                point_labels=None,  
+                point_labels=None,
                 box=bbox,
                 multimask_output=False,
             )
-
+       
         mask_img = self.show_mask(mask, random_color=False)
 
         return mask_img

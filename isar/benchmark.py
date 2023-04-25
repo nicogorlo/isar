@@ -16,22 +16,22 @@ class Benchmark():
         self.datadir_DAVIS = "/home/nico/semesterproject/data/DAVIS_single_object_tracking"
         self.datadir_Habitat_single_obj = "/home/nico/semesterproject/data/habitat_single_object_tracking/"
 
-        self.detector = Detector()
+        self.detector = Detector("cpu", "vit_h")
 
         self.stats = {}
 
-        self.detector.show_images = False
-
-        self.detector.segmentor.use_precomputed_embedding = True
+        self.detector.show_images = True
 
         self.outdir = outdir
 
+        if self.detector.show_images:
+            cv2.namedWindow("seg")
 
 
+    "iterate over all datasets (DAVIS_single_obj, Habitat_single_obj)"
     def run(self):
         for dataset in self.datasets:
             self.run_dataset(dataset)
-
 
     def run_dataset(self, dataset):
         if dataset == 'DAVIS_single_obj':
@@ -41,6 +41,7 @@ class Benchmark():
         else:
             raise Exception("Dataset {} not supported".format(dataset))
         
+    "iterate over all tasks in a dataset (e.g. 'car', 'duck', 'giraffe', ...)"        
     def run_single_object(self, datadir):
 
         taskdir = datadir
@@ -61,7 +62,8 @@ class Benchmark():
             dataset_stats[task] = task_stats
 
         return dataset_stats
-        
+    
+    "iterate over all images in a task (e.g. '0000000.jpg', '0000001.jpg', ...)"
     def run_task(self, task, imgdir, evaldir, embdir, prompt=None):
 
         self.detector.outdir = os.path.join(self.outdir, task)
@@ -89,6 +91,10 @@ class Benchmark():
 
             if self.detector.start_reid:
                 eval.compute_evaluation_metrics(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image_name), image_name)
+
+
+            if self.detector.show_images:
+                cv2.waitKey(1)
 
         task_stats = eval.report_results(task)
     

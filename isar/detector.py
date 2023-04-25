@@ -19,17 +19,13 @@ from params import OUTDIR, KEEP_LOGITS, KEEP_OBJECTNESS, ADA_THRESH_MAX_OVERLAP,
 
 
 class Detector():
-    def __init__(self, device = "cpu", sam_model_type = "vit_h"):
+    def __init__(self, device = "cpu", sam_model_type = "vit_h", use_precomputed_embeddings = False):
 
         self.segmentor = SegmentorSAM(device, sam_model_type)
+        self.segmentor.use_precomputed_embedding = use_precomputed_embeddings
+
         self.reid = Reidentification()
         self.ow_detr = OW_DETR(keep_logits=KEEP_LOGITS, keep_objectness=KEEP_OBJECTNESS)
-
-        self.transform = T.Compose([
-            T.Resize(800),
-            T.ToTensor(),
-            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        ])
 
         self.prob: torch.Tensor = None
         self.boxes: torch.Tensor = None
@@ -37,7 +33,7 @@ class Detector():
         self.outdir = OUTDIR
 
         self.cutout_features = None
-
+    
         self.show_images = True
 
         self.start_reid = False
@@ -65,9 +61,9 @@ class Detector():
         b = b * torch.tensor([img_w, img_h, img_w, img_h], dtype=torch.float32)
         return b
     
-    def detect(self, image: np.ndarray, image_name: str, embedding: str):
+    def detect(self, img: np.ndarray, image_name: str, embedding: str):
         with performance_measure("OW DETR boxes"):
-            scores, boxes, labels, keep = self.ow_detr(image)
+            scores, boxes, labels, keep = self.ow_detr(img)
 
             self.prob = scores[0, keep]
             self.boxes = boxes[0, keep]
@@ -76,22 +72,22 @@ class Detector():
 
         if self.start_reid:
             with performance_measure("Get most similar box"):
-                match = self.get_most_similar_box(image)
+                match = self.get_most_similar_box(img)
 
             if match is not None:
-                seg = self.segmentor(image, match, embedding)
-                dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
+                seg = self.segmentor(img, match, embedding)
+                dst = cv2.addWeighted(img.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
 
                 if self.show_images: 
                     dst = self.visualize_scores(seg, dst, color=(0,255,0))
                     cv2.rectangle (dst, (match[0], match[1]), (match[2], match[3]), (0,255,0), 2)
                     cv2.imshow('seg', dst)
-                    cv2.imshow('match', self.get_cutout(image, match))
+                    cv2.imshow('match', self.get_cutout(img, match))
 
             else: 
                 print("no match found")
-                seg = np.zeros(image.shape)
-                dst = cv2.addWeighted(image.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
+                seg = np.zeros(img.shape)
+                dst = cv2.addWeighted(img.astype('uint8'), 0.7, seg.astype('uint8'), 0.3, 0).astype('uint8')
 
                 if self.show_images:
                     dst = self.visualize_scores(seg, dst, color=(0,0,255))

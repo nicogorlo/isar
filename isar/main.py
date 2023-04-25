@@ -15,7 +15,7 @@ sys.path.append('external/dino-vit-features')
 from params import DATADIR, DATASET, EVALDIR, IMGDIR, TASK, OUTDIR, FPS, EMBDIR
 
 
-fps = 15
+fps = 10
 
 
 def main():
@@ -23,18 +23,20 @@ def main():
 	if not os.path.exists(os.path.join("/home/nico/semesterproject/test/", TASK)):
 		os.makedirs(os.path.join("/home/nico/semesterproject/test/", TASK))
 	
-	detector = Detector()
+	use_precomputed_embeddings = True
+	detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
 	ui = UserInterface(detector=detector)
 	if DATASET == 'DAVIS' or DATASET == 'Habitat_single_obj':
 		eval = Evaluation(EVALDIR)
 
-	detector.segmentor.use_precomputed_embedding = True
+
 	ious = {}
 
 	images = get_image_it_from_folder(IMGDIR)
 
 	while True:
 		image = images.__next__()
+		print("\nImage: ", image)
 		embedding = os.path.join(EMBDIR, image.replace(".jpg", ".pt"))
 		# if os.path.exists(embedding):
 		# 	emb = torch.load(embedding)
@@ -50,10 +52,16 @@ def main():
 			ious[image] = iou
 			
 		show_img = img.copy()
-		ui.plot_boxes(show_img, prob, boxes)
+
+		if detector.start_reid:
+			ui.plot_boxes(show_img, prob, boxes)
+		
 		cv2.imshow('image', show_img)
 		
-		k = cv2.waitKey(int(1000/fps)) #& 0xFF ## TODO: find alternative to waitKey such that operations can be performed in parallel
+		if not detector.start_reid:
+			k = cv2.waitKey(0)
+		else:
+			k = cv2.waitKey(int(1000/fps)) #& 0xFF ## TODO: find alternative to waitKey such that operations can be performed in parallel
 		if k == 27:
 			break
 	

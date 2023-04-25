@@ -149,7 +149,7 @@ def habitat_dataset_reader(folder_habitat_raw_frames, out_folder):
 def davis_dataset_reader(folder_davis_raw_frames, out_folder, semantic_folder, embedding_folder):
 
     prompt_dict = {}
-    for scene in sorted(os.listdir(folder_davis_raw_frames))[63:]:
+    for scene in sorted(os.listdir(folder_davis_raw_frames)):
         print(scene)
         dr = DavisSceneDataReader(folder_davis_raw_frames, out_folder, semantic_folder, scene)
         dr()

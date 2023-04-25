@@ -49,6 +49,8 @@ class UserInterface():
 
 
     def plot_single_box(self, img, prob, box):
+        if box is None or prob is None:
+            return
         xmin, ymin, xmax, ymax = box[0]
         xmin=int(xmin); xmax=int(xmax); ymin=int(ymin); ymax=int(ymax)
         cv2.rectangle(img, pt1=np.array([xmin, ymin]), pt2=np.array([xmax,ymax]),
