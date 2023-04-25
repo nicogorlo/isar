@@ -43,7 +43,7 @@ class Detector():
         self.it = 0
 
         ## for verbose
-        self.adaptive_threshold = 0.7
+        self.adaptive_threshold = 0.87
         self.fixed_threshold = 0.87
         self.max_sim = 0.0
 
@@ -86,6 +86,7 @@ class Detector():
 
                 if self.show_images:
                     dst = self.visualize_scores(seg, dst, color=(0,0,255))
+                    cv2.imshow('seg', dst)
 
             cv2.imwrite(os.path.join(self.outdir, image_name), dst)
             self.it+=1
