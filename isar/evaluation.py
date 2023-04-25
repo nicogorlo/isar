@@ -22,8 +22,10 @@ class Evaluation():
     def compute_IoU(self, seg1, seg2):
         intersection = np.logical_and(seg1, seg2)
         union = np.logical_or(seg1, seg2)
-        iou_score = np.sum(intersection) / np.sum(union)
-
+        if sum(union) == 0:
+            return 1.0
+        else: 
+            iou_score = np.sum(intersection) / np.sum(union)
         return iou_score
     
 
