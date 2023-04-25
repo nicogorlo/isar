@@ -91,7 +91,7 @@ class Evaluation():
         else:
             false_detection_rate_not_visible = self.false_detection_not_visible / self.total_frames_not_visible
         print("scene mIoU: {}".format(self.mIoU))
-        print("misclassifications: {}".format(self.misclassifications))
+        print("misclassification rate: {}".format(self.misclassifications/len(self.ious)))
         print("false detection ratio visible: {}".format(false_detection_rate_visible))
         print("false detection ratio not visible: {}".format(false_detection_rate_not_visible))
 
