@@ -84,10 +84,15 @@ class Evaluation():
         self.object_visible_gt_counter(gt_mask)
 
     def report_results(self, scene_name):
-        self.mIoU = np.mean(self.ious.values())
+        self.mIoU = np.mean(list(self.ious.values()))
+        false_detection_rate_visible = self.false_detection_visible / self.total_frames_visible
+        if self.total_frames_not_visible == 0:
+            false_detection_rate_not_visible = None
+        else:
+            false_detection_rate_not_visible = self.false_detection_not_visible / self.total_frames_not_visible
         print("scene mIoU: {}".format(self.mIoU))
         print("misclassifications: {}".format(self.misclassifications))
-        print("false detection ratio visible: {}".format(self.false_detection_visible / self.total_frames_visible))
-        print("false detection ratio not visible: {}".format(self.false_detection_not_visible / self.total_frames_not_visible))
+        print("false detection ratio visible: {}".format(false_detection_rate_visible))
+        print("false detection ratio not visible: {}".format(false_detection_rate_not_visible))
 
-        return {scene_name: {'mIoU': self.mIoU, 'misclassifications': self.misclassifications, 'false_detection_ratio_visible': self.false_detection_visible / self.total_frames_visible, 'false_detection_ratio_not_visible': self.false_detection_not_visible / self.total_frames_not_visible}}
+        return {scene_name: {'mIoU': self.mIoU, 'misclassifications': self.misclassifications, 'false_detection_ratio_visible': false_detection_rate_visible, 'false_detection_ratio_not_visible': false_detection_rate_not_visible}}
