@@ -3,7 +3,7 @@ import cv2
 import os
 import json
 from pathlib import Path
-import datetime
+from datetime import datetime
 
 from detector import Detector
 from sam_detector import SAMDetector
@@ -88,10 +88,11 @@ class Benchmark():
 
             if self.detector.__class__ == SAMDetector and self.use_gt_mask_first_image:
                 mask = eval.get_gt_mask(image_names[0])
+                bbox = self.detector.get_bbox_from_mask(mask)
                 img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
                 transposed_features = img_features.transpose(1, 2, 0)
                 sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                clip_features = self.detector.get_clip_features(img0, mask)
+                clip_features = self.detector.get_clip_features(img0, mask, bbox)
                 # self.detector.template_feature = np.concatenate((sam_features, clip_features))
                 self.detector.template_feature = clip_features
                 self.detector.template_feature /= np.linalg.norm(self.detector.template_feature)
@@ -110,15 +111,17 @@ class Benchmark():
             if self.detector.__class__ == SAMDetector and self.print_gt_feature_distance:
                 self.detector.set_img_embedding(img, emb)
                 mask = eval.get_gt_mask(image_name)
-                img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
-                transposed_features = img_features.transpose(1, 2, 0)
-                sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                clip_features = self.detector.get_clip_features(img, mask)
-                # gt_mask_descriptor = np.concatenate((sam_features, clip_features))
-                gt_mask_descriptor = clip_features
-                gt_mask_descriptor /= np.linalg.norm(gt_mask_descriptor)
-                nearest_neighbor_index, nearest_neighbor_descriptor, min_distance = self.detector.get_nearest_neighbor_descriptor([gt_mask_descriptor])
-                print("distance of gt to template: ", min_distance)
+                if np.sum(mask) > 0: 
+                    bbox = self.detector.get_bbox_from_mask(mask)
+                    img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
+                    transposed_features = img_features.transpose(1, 2, 0)
+                    sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                    clip_features = self.detector.get_clip_features(img, mask, bbox)
+                    # gt_mask_descriptor = np.concatenate((sam_features, clip_features))
+                    gt_mask_descriptor = clip_features
+                    gt_mask_descriptor /= np.linalg.norm(gt_mask_descriptor)
+                    nearest_neighbor_index, nearest_neighbor_descriptor, min_distance = self.detector.get_nearest_neighbor_descriptor([gt_mask_descriptor])
+                    print("distance of gt to template: ", min_distance)
                 self.detector.predictor.reset_image()
 
             if self.detector.show_images:
@@ -135,7 +138,7 @@ def main():
     bm.print_gt_feature_distance = True
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run('DAVIS_single_obj')
+    bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:

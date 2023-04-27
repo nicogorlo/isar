@@ -93,7 +93,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
 
         with performance_measure("CLIP"):
-            clip_features = self.get_clip_features(img, mask)
+            clip_features = self.get_clip_features(img, mask, selected_box)
             
         # self.template_feature = np.concatenate((sam_features, clip_features))
         self.template_feature = clip_features
@@ -117,17 +117,20 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         if self.start_reid:
 
             self.set_img_embedding(img, embedding)
-            masks = self.segment_all(img, embedding)
 
-            masks = [m for m in masks if np.sum(m) > 1000]
+            masks = [m for m in self.segment_all(img, embedding) if np.sum(m) > 1000]
 
+            boxes = []
             mask_descriptors = []
             with performance_measure("all SAM object_descriptors"):
                 img_features = self.predictor.get_image_embedding().squeeze().cpu().numpy()
                 transposed_features = img_features.transpose(1, 2, 0)
                 for idx, mask in enumerate(masks):
-                    sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                    clip_features = self.get_clip_features(img, mask)
+                    bbox = self.get_bbox_from_mask(mask)
+                    boxes.append(bbox)
+                    # sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                    clip_features = self.get_clip_features(img, mask, bbox)
+
                     # mask_descriptor = np.concatenate((sam_features, clip_features))
                     mask_descriptor = clip_features
                     mask_descriptor /= np.linalg.norm(mask_descriptor)
@@ -169,7 +172,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
             self.predictor.reset_image()
 
-            boxes = np.array([self.get_bbox_from_mask(m) for m in masks])
+            boxes = np.array(boxes)
             scores = np.array([similarities[i] for i in range(len(masks))])
 
             # scores = np.array([0.0 for i in range(len(masks))])
@@ -205,15 +208,13 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
     #     return similarities[max_similarity_idx], max_similarity_idx, similarities
 
-    def get_clip_features(self, img, mask):
+    def get_clip_features(self, img, mask, bbox):
         # mask image:
         mask = mask.squeeze()
-        bbox = self.get_bbox_from_mask(mask)
-        # set all pixels outside of mask to 0:
+        # set all pixels outside of mask to 0: #TODO: check how different colors/random image noise influences this.
         masked_image = img.copy()
         masked_image[mask==0,:] = np.array([255,255,255])
         masked_image = masked_image[bbox[1]:bbox[3], bbox[0]:bbox[2], :]
-
 
         # get clip features:
         clip_features = self.clip(masked_image)
@@ -288,7 +289,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
         return mask_feature_vector_mean
     
-    def get_bbox_from_mask(self, mask: torch.Tensor):
+    def get_bbox_from_mask(self, mask: np.ndarray):
         mask = mask.squeeze().astype(np.uint8)
         
         row_indices, col_indices = np.where(mask)
