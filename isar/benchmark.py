@@ -30,6 +30,7 @@ class Benchmark():
             cv2.namedWindow("seg")
 
         self.use_gt_mask_first_image = False
+        self.print_gt_feature_distance = False
 
     "iterate over all datasets (DAVIS_single_obj, Habitat_single_obj)"
     def run(self):
@@ -88,8 +89,11 @@ class Benchmark():
                 mask = eval.get_gt_mask(image_names[0])
                 img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
                 transposed_features = img_features.transpose(1, 2, 0)
-                mask_embedding = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                self.detector.template_feature = mask_embedding
+                sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                clip_features = self.detector.get_clip_features(img0, mask)
+                # self.detector.template_feature = np.concatenate((sam_features, clip_features))
+                self.detector.template_feature = clip_features
+                self.detector.template_feature /= np.linalg.norm(self.detector.template_feature)
             image_names.pop(0)
 
 
@@ -102,17 +106,19 @@ class Benchmark():
             if self.detector.start_reid:
                 eval.compute_evaluation_metrics(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image_name), image_name)
 
-            if self.detector.__class__ == SAMDetector and self.use_gt_mask_first_image:
+            if self.detector.__class__ == SAMDetector and self.print_gt_feature_distance:
                 self.detector.set_img_embedding(img, emb)
                 mask = eval.get_gt_mask(image_name)
                 img_features = self.detector.predictor.get_image_embedding().squeeze().cpu().numpy()
                 transposed_features = img_features.transpose(1, 2, 0)
-                mask_embedding = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                gt_mask_descriptor = mask_embedding
+                sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                clip_features = self.detector.get_clip_features(img, mask)
+                # gt_mask_descriptor = np.concatenate((sam_features, clip_features))
+                gt_mask_descriptor = clip_features
+                gt_mask_descriptor /= np.linalg.norm(gt_mask_descriptor)
                 nearest_neighbor_index, nearest_neighbor_descriptor, min_distance = self.detector.get_nearest_neighbor_descriptor([gt_mask_descriptor])
                 print("distance of gt to template: ", min_distance)
                 self.detector.predictor.reset_image()
-                
 
             if self.detector.show_images:
                 cv2.waitKey(1)
@@ -125,6 +131,7 @@ def main():
 
     bm = Benchmark("/home/nico/semesterproject/test/")
     bm.use_gt_mask_first_image = True
+    bm.print_gt_feature_distance = True
     bm.run()
     
     stat_path = os.path.join(bm.outdir, "stats.json")

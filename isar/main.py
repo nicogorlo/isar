@@ -59,9 +59,9 @@ def main():
 		if detector.start_reid:
 			ui.plot_boxes(show_img, prob, boxes)
 		
-		if detector.__class__ == SAMDetector and detector.show_images:
-			for point in detector.point_grid:
-				cv2.circle(show_img, (int(point[1]*show_img.shape[1]), int(point[0]*show_img.shape[0])), radius=4, color=(255, 255, 255), thickness=-1)
+		# if detector.__class__ == SAMDetector and detector.show_images:
+		# 	for point in detector.point_grid:
+		# 		cv2.circle(show_img, (int(point[1]*show_img.shape[1]), int(point[0]*show_img.shape[0])), radius=4, color=(255, 255, 255), thickness=-1)
 		
 		cv2.imshow('image', show_img)
 		

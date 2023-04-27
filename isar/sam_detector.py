@@ -12,6 +12,8 @@ torch.set_grad_enabled(False)
 from params import OUTDIR
 from util.isar_utils import performance_measure, semantic_obs_to_img, generate_pastel_color
 
+from reidentification import Reidentification
+
 from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
 
 from segment_anything.utils.amg import batch_iterator, build_all_layer_point_grids, build_point_grid
@@ -39,6 +41,8 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         self.use_precomputed_embedding = use_precomputed_embeddings
 
         self.start_reid = False
+
+        self.clip = Reidentification()
 
         self.show_images = True
 
@@ -85,9 +89,15 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         with performance_measure("SAM object_descriptor"):
             img_features = self.predictor.get_image_embedding().squeeze().cpu().numpy()
             transposed_features = img_features.transpose(1, 2, 0)
-            mask_descriptor = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+            sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
 
-        self.template_feature = mask_descriptor
+
+        with performance_measure("CLIP"):
+            clip_features = self.get_clip_features(img, mask)
+            
+        # self.template_feature = np.concatenate((sam_features, clip_features))
+        self.template_feature = clip_features
+        self.template_feature /= np.linalg.norm(self.template_feature)
 
         self.start_reid = True
 
@@ -116,8 +126,12 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
                 img_features = self.predictor.get_image_embedding().squeeze().cpu().numpy()
                 transposed_features = img_features.transpose(1, 2, 0)
                 for idx, mask in enumerate(masks):
-                    mask_descriptor = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                    
+                    sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+                    clip_features = self.get_clip_features(img, mask)
+                    # mask_descriptor = np.concatenate((sam_features, clip_features))
+                    mask_descriptor = clip_features
+                    mask_descriptor /= np.linalg.norm(mask_descriptor)
+
                     mask_descriptors.append(mask_descriptor)
             
             n_masks = len(mask_descriptors)
@@ -184,13 +198,27 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         
         return max_similarity, max_similarity_idx, similarities
     
-    def compute_similarities_cosine(self, mask_descriptors):
-        similarities = cosine_similarity(np.atleast_2d(self.template_feature), mask_descriptors)
-        max_similarity_idx = np.argmax(similarities)
-        nearest_neighbor_descriptor = mask_descriptors[max_similarity_idx]
+    # def compute_similarities_cosine(self, mask_descriptors):
+    #     similarities = cosine_similarity(np.atleast_2d(self.template_feature), mask_descriptors)
+    #     max_similarity_idx = np.argmax(similarities)
+    #     nearest_neighbor_descriptor = mask_descriptors[max_similarity_idx]
 
-        return similarities[max_similarity_idx], max_similarity_idx, similarities
+    #     return similarities[max_similarity_idx], max_similarity_idx, similarities
 
+    def get_clip_features(self, img, mask):
+        # mask image:
+        mask = mask.squeeze()
+        bbox = self.get_bbox_from_mask(mask)
+        # set all pixels outside of mask to 0:
+        masked_image = img.copy()
+        masked_image[mask==0,:] = np.array([255,255,255])
+        masked_image = masked_image[bbox[1]:bbox[3], bbox[0]:bbox[2], :]
+
+
+        # get clip features:
+        clip_features = self.clip(masked_image)
+
+        return clip_features.cpu().numpy()
     
     def segment_all(self, img: np.ndarray, embedding: str):
 
