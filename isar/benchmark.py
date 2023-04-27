@@ -3,6 +3,7 @@ import cv2
 import os
 import json
 from pathlib import Path
+import datetime
 
 from detector import Detector
 from sam_detector import SAMDetector
@@ -17,8 +18,8 @@ class Benchmark():
         self.datadir_DAVIS = "/home/nico/semesterproject/data/DAVIS_single_object_tracking"
         self.datadir_Habitat_single_obj = "/home/nico/semesterproject/data/habitat_single_object_tracking/"
 
-        # self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, n_per_side=16)
-        self.detector = Detector("cpu", "vit_h")
+        self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, n_per_side=16)
+        # self.detector = Detector("cpu", "vit_h")
 
         self.stats = {}
 
@@ -56,7 +57,7 @@ class Benchmark():
         dataset_stats = {}
 
         
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "plastic" in i)][:]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "plastic" in i)][0]:
             print("Task: ", task)
 
             imgdir = os.path.join(taskdir, task, 'rgb/')
@@ -128,13 +129,14 @@ class Benchmark():
         return task_stats
 
 def main():
-
+    
     bm = Benchmark("/home/nico/semesterproject/test/")
     bm.use_gt_mask_first_image = True
     bm.print_gt_feature_distance = True
-    bm.run()
-    
-    stat_path = os.path.join(bm.outdir, "stats.json")
+    now = datetime.now()
+    now_str = now.strftime("%Y_%m_%d_%H%M%S")
+    bm.run('DAVIS_single_obj')
+    stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
         json.dump(bm.stats, f, indent=4)
