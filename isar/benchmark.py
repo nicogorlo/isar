@@ -3,7 +3,7 @@ import cv2
 import os
 import json
 from pathlib import Path
-import datetime
+from datetime import datetime
 
 from detector import Detector
 from sam_detector import SAMDetector
@@ -135,7 +135,7 @@ def main():
     bm.print_gt_feature_distance = True
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run('DAVIS_single_obj')
+    bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
