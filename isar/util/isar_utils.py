@@ -5,6 +5,8 @@ import cv2
 import random
 import numpy as np
 from PIL import Image
+from tqdm import tqdm
+import shutil
 
 class performance_measure:
 
@@ -28,6 +30,19 @@ def get_image_it_from_folder(datadir) -> itertools.cycle:
     images = itertools.cycle([image for image in sorted(os.listdir(datadir))])
     
     return images
+
+def copy_data(srcdir: str, dstdir: str):
+
+    for scene in tqdm(sorted(os.listdir(srcdir))):
+        print("Scene: ", scene)
+
+        if not os.path.exists(os.path.join(dstdir, scene, 'ImageEmbeddings')):
+            os.mkdir(os.path.join(dstdir, scene, 'ImageEmbeddings'))
+        # shutil.copytree(os.path.join(srcdir, scene), os.path.join(dstdir, scene, 'ImageEmbeddings'))
+
+        for file in sorted(os.listdir(os.path.join(srcdir, scene))):
+            # print("File: ", file)
+            shutil.copy2(os.path.join(srcdir, scene, file), os.path.join(dstdir, scene, 'ImageEmbeddings', file))
 
 
 
