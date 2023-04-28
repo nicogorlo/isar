@@ -1,6 +1,8 @@
 import numpy as np
 import cv2
 import os
+import argparse
+
 from ui.ui import UserInterface
 from detector import Detector
 from sam_detector import SAMDetector
@@ -19,17 +21,21 @@ from params import DATADIR, DATASET, EVALDIR, IMGDIR, TASK, OUTDIR, FPS, EMBDIR
 fps = 10
 
 
-def main():
+def main(datadir, outdir, dataset, task):
 
-	if not os.path.exists(os.path.join("/home/nico/semesterproject/test/", TASK)):
-		os.makedirs(os.path.join("/home/nico/semesterproject/test/", TASK))
+	IMGDIR = os.path.join(datadir, task, "rgb")
+	EVALDIR = os.path.join(datadir, task, "semantics")
+	EMBDIR = os.path.join(datadir, task, "embeddings")
+
+	if not os.path.exists(outdir):
+		os.makedirs(outdir)
 	
 	use_precomputed_embeddings = True
-	detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
-	detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings, n_per_side=32)
+	# detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
+	detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings, n_per_side=16)
 
 	ui = UserInterface(detector=detector)
-	if DATASET == 'DAVIS' or DATASET == 'Habitat_single_obj':
+	if dataset == 'DAVIS' or dataset == 'Habitat_single_obj':
 		eval = Evaluation(EVALDIR)
 
 
@@ -49,7 +55,7 @@ def main():
 
 		prob, boxes, seg = detector.detect(img, image, embedding)
 
-		if detector.start_reid and (DATASET == 'DAVIS' or DATASET == 'Habitat_single_obj'):
+		if detector.start_reid and (dataset == 'DAVIS' or dataset == 'Habitat_single_obj'):
 			iou = eval.compute_IoU(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image))
 			print("Intersection over Union wrt. ground truth: ", iou)
 			ious[image] = iou
@@ -64,6 +70,8 @@ def main():
 		# 		cv2.circle(show_img, (int(point[1]*show_img.shape[1]), int(point[0]*show_img.shape[0])), radius=4, color=(255, 255, 255), thickness=-1)
 		
 		cv2.imshow('image', show_img)
+
+		print("Select object to track and press enter.")
 		
 		if not detector.start_reid:
 			k = cv2.waitKey(0)
@@ -78,4 +86,22 @@ def main():
 	cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-	main()
+
+	parser = argparse.ArgumentParser(description="A script to process data using datadir and outdir")
+
+	parser.add_argument(
+        "-d", "--datadir", type=str, default=DATADIR, help="Path to the data directory (default: 'params/DATADIR')"
+    )
+	parser.add_argument(
+        "-o", "--outdir", type=str, default=OUTDIR, help="Path to the output directory (default: 'params/OUTDIR')"
+    )
+	parser.add_argument(
+        "-ds", "--dataset", type=str, default=DATASET, help="name of the dataset (default: 'params/DATASET'), 'Habitat_single_obj' or 'DAVIS'"
+    )
+	parser.add_argument(
+        "-t", "--task", type=str, default=TASK, help="name of the task (default: 'params/TASK')"
+    )
+
+	args = parser.parse_args()
+
+	main(args.datadir, args.outdir, args.dataset, args.task)

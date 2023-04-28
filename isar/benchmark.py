@@ -4,6 +4,7 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
+import argparse
 
 from detector import Detector
 from sam_detector import SAMDetector
@@ -13,10 +14,10 @@ from util.isar_utils import get_image_it_from_folder
 
 
 class Benchmark():
-    def __init__(self, outdir):
+    def __init__(self, outdir, datadir_davis, datadir_habitat):
         self.datasets = ['DAVIS_single_obj', 'Habitat_single_obj']
-        self.datadir_DAVIS = "/home/nico/semesterproject/data/DAVIS_single_object_tracking"
-        self.datadir_Habitat_single_obj = "/home/nico/semesterproject/data/habitat_single_object_tracking/"
+        self.datadir_DAVIS = datadir_davis
+        self.datadir_Habitat_single_obj = datadir_habitat
 
         self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, n_per_side=16)
         # self.detector = Detector("cpu", "vit_h")
@@ -93,8 +94,8 @@ class Benchmark():
                 transposed_features = img_features.transpose(1, 2, 0)
                 sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
                 clip_features = self.detector.get_clip_features(img0, mask, bbox)
-                # self.detector.template_feature = np.concatenate((sam_features, clip_features))
-                self.detector.template_feature = clip_features
+                self.detector.template_feature = np.concatenate((sam_features, clip_features))
+                # self.detector.template_feature = clip_features
                 self.detector.template_feature /= np.linalg.norm(self.detector.template_feature)
             image_names.pop(0)
 
@@ -117,8 +118,8 @@ class Benchmark():
                     transposed_features = img_features.transpose(1, 2, 0)
                     sam_features = self.detector.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
                     clip_features = self.detector.get_clip_features(img, mask, bbox)
-                    # gt_mask_descriptor = np.concatenate((sam_features, clip_features))
-                    gt_mask_descriptor = clip_features
+                    gt_mask_descriptor = np.concatenate((sam_features, clip_features))
+                    # gt_mask_descriptor = clip_features
                     gt_mask_descriptor /= np.linalg.norm(gt_mask_descriptor)
                     nearest_neighbor_index, nearest_neighbor_descriptor, min_distance = self.detector.get_nearest_neighbor_descriptor([gt_mask_descriptor])
                     print("distance of gt to template: ", min_distance)
@@ -131,9 +132,9 @@ class Benchmark():
     
         return task_stats
 
-def main():
+def main(outdir, datadir_davis, datadir_habitat):
     
-    bm = Benchmark("/home/nico/semesterproject/test/")
+    bm = Benchmark(outdir, datadir_davis, datadir_habitat)
     bm.use_gt_mask_first_image = True
     bm.print_gt_feature_distance = True
     now = datetime.now()
@@ -145,4 +146,21 @@ def main():
         json.dump(bm.stats, f, indent=4)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a DAVIS and a Habitat dataset")
+
+    parser.add_argument(
+        "-d", "--datadir_davis", type=str, default="/home/nico/semesterproject/data/DAVIS_single_object_tracking/", 
+        help="Path to the DAVIS dataset"
+    )
+    parser.add_argument(
+        "-h", "--datadir_habitat", type=str, default="/home/nico/semesterproject/data/habitat_single_object_tracking/", 
+        help="Path to the Habitat dataset"
+    )
+    parser.add_argument(
+        "-o", "--outdir", type=str, default="/home/nico/semesterproject/test/",
+        help="Path to the output directory"
+    )
+
+    args = parser.parse_args()
+    
+    main(args.outdir, args.datadir_davis, args.datadir_habitat)
