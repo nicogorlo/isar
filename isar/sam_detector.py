@@ -29,6 +29,8 @@ from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
 from scipy.spatial import distance
 from sklearn.metrics.pairwise import cosine_similarity
 
+from visualization_pca import VisualizationPca
+
 from params import FeatureModes
 
 
@@ -41,6 +43,8 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         sam_checkpoint = os.path.join('modelzoo', [i for i in os.listdir('modelzoo') if model_type in i][0])
 
         self.use_precomputed_embedding = use_precomputed_embeddings
+        
+        self.feature_mode = FeatureModes.CLIP_SAM
 
         self.start_reid = False
 
@@ -63,13 +67,25 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
         self.semantic_palette = np.array([generate_pastel_color() for _ in range(256)],dtype=np.uint8)
 
+        self.visualize_pca = True
+        
+        if self.feature_mode == FeatureModes.SAM and self.visualize_pca:
+            self.pca_vis = VisualizationPca()
+
 
     """
     gets called on the mouse callback of the UI
     """
     def on_click(self, x: int, y: int, img: np.ndarray, embedding: str):
+        
+        img_features = None
 
-        self.set_img_embedding(img, embedding)
+        x = int(x * 512 / img.shape[1])
+        y = int(y * 512 / img.shape[0])
+        sam_img = cv2.resize(img, (512, 512))
+
+        # TODO: recompute Embeddings! (old ones seem to be corrupted because they were not computed on the resized image)
+        self.set_img_embedding(sam_img, embedding)
 
         mask, iou_prediction, _ = self.predictor.predict(
             point_coords=np.array([[x, y]]),
@@ -80,26 +96,29 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
         selected_prob = torch.tensor(iou_prediction)
         selected_box = self.get_bbox_from_mask(mask)
-        freeze = img
-        cutout = self.get_cutout(img, selected_box)
+        freeze = sam_img
+        cutout = self.get_cutout(sam_img, selected_box)
 
         show_mask = self.show_mask(mask)
 
-        dst = cv2.addWeighted(img.astype('uint8'), 0.7, show_mask.astype('uint8'), 0.3, 0).astype('uint8')
-        cv2.imshow("seg", dst)
+        dst = cv2.addWeighted(sam_img.astype('uint8'), 0.7, show_mask.astype('uint8'), 0.3, 0).astype('uint8')
+        cv2.imshow("seg", cv2.resize(dst, (img.shape[1], img.shape[0])))
 
-        with performance_measure("SAM object_descriptor"):
+
+        if self.feature_mode == FeatureModes.SAM or self.feature_mode == FeatureModes.CLIP_SAM:
             img_features = self.predictor.get_image_embedding().squeeze().cpu().numpy()
-            transposed_features = img_features.transpose(1, 2, 0)
-            sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
+        
+        self.template_feature = self.mask_to_features(sam_img, mask, img_features)
 
 
-        with performance_measure("CLIP"):
-            clip_features = self.get_clip_features(img, mask, selected_box)
-            
-        # self.template_feature = np.concatenate((sam_features, clip_features))
-        self.template_feature = clip_features
-        self.template_feature /= np.linalg.norm(self.template_feature)
+        if self.feature_mode == FeatureModes.SAM and self.visualize_pca:
+            img_embedding_T = img_features
+            img_embedding = img_embedding_T.transpose(1, 2, 0)
+            img_embedding_flat = img_embedding.reshape(img_embedding.shape[0] * img_embedding.shape[1], img_embedding.shape[2])
+            self.pca_vis.set_template(img_embedding_flat, mask, img_embedding.shape[0], img_embedding.shape[1])
+            vis_embedding = self.pca_vis.transform(img_embedding_flat)
+            self.pca_vis.visualize(vis_embedding, img.shape)
+            cv2.waitKey(1)
 
         self.start_reid = True
 
@@ -115,28 +134,31 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         scores = None
         boxes = None
         show_mask = None
+        img_features = None
 
         if self.start_reid:
 
-            self.set_img_embedding(img, embedding)
+            sam_img = cv2.resize(img, (512, 512))
+            # TODO: recompute Embeddings! (old ones seem to be corrupted because they were 
+            # not computed on the resized image)
+            self.set_img_embedding(sam_img, embedding)
 
-            masks = [m for m in self.segment_all(img, embedding) if np.sum(m) > 1000]
+            masks = [m for m in self.segment_all(sam_img, embedding) if np.sum(m) > 1000]
 
             boxes = []
             mask_descriptors = []
-            with performance_measure("all SAM object_descriptors"):
-                img_features = self.predictor.get_image_embedding().squeeze().cpu().numpy()
-                transposed_features = img_features.transpose(1, 2, 0)
+            with performance_measure("all object descriptors"):
+                if self.feature_mode == FeatureModes.SAM or self.feature_mode == FeatureModes.CLIP_SAM:
+                    img_features = self.predictor.get_image_embedding().squeeze().cpu().numpy()
+                if self.feature_mode == FeatureModes.SAM and self.visualize_pca:
+                    transposed_features = img_features.transpose(1, 2, 0)
+                    img_embedding_flat = transposed_features.reshape(transposed_features.shape[0] * transposed_features.shape[1], transposed_features.shape[2])
+                    vis_embedding = self.pca_vis.transform(img_embedding_flat)
+                    self.pca_vis.visualize(vis_embedding, img.shape)
+                    cv2.waitKey(1)
+
                 for idx, mask in enumerate(masks):
-                    bbox = self.get_bbox_from_mask(mask)
-                    boxes.append(bbox)
-                    # sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
-                    clip_features = self.get_clip_features(img, mask, bbox)
-
-                    # mask_descriptor = np.concatenate((sam_features, clip_features))
-                    mask_descriptor = clip_features
-                    mask_descriptor /= np.linalg.norm(mask_descriptor)
-
+                    mask_descriptor = self.mask_to_features(sam_img, mask, img_features)
                     mask_descriptors.append(mask_descriptor)
             
             n_masks = len(mask_descriptors)
@@ -160,6 +182,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
             
             show_mask = self.show_mask(mask)
+            show_mask = cv2.resize(show_mask, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
 
             dst = cv2.addWeighted(img.astype('uint8'), 0.7, show_mask.astype('uint8'), 0.3, 0).astype('uint8')
 
@@ -199,12 +222,28 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         
         return max_similarity, max_similarity_idx, similarities
     
-    # def compute_similarities_cosine(self, mask_descriptors):
-    #     similarities = cosine_similarity(np.atleast_2d(self.template_feature), mask_descriptors)
-    #     max_similarity_idx = np.argmax(similarities)
-    #     nearest_neighbor_descriptor = mask_descriptors[max_similarity_idx]
+    def mask_to_features(self, img, mask, img_features = None):
+        """
+        computes descriptor for a given mask and image. 
+        If the feature mode is SAM, the image needs to be set before. (self.predictor.set_image(img))
+        """
+        if self.feature_mode == FeatureModes.SAM or self.feature_mode == FeatureModes.CLIP_SAM:
+            transposed_features = img_features.transpose(1, 2, 0)
+            sam_features = self.get_sam_object_descriptor(mask, img_features.shape, transposed_features)
 
-    #     return similarities[max_similarity_idx], max_similarity_idx, similarities
+        if self.feature_mode == FeatureModes.CLIP or self.feature_mode == FeatureModes.CLIP_SAM:
+            bbox = self.get_bbox_from_mask(mask)
+            clip_features = self.get_clip_features(img, mask, bbox)
+        
+        if self.feature_mode == FeatureModes.SAM:
+            feature_vec = sam_features
+        elif self.feature_mode == FeatureModes.CLIP:
+            feature_vec = clip_features
+        elif self.feature_mode == FeatureModes.CLIP_SAM:
+            feature_vec = np.concatenate((sam_features, clip_features))
+        
+        feature_vec /= np.linalg.norm(feature_vec)
+        return feature_vec
 
     def get_clip_features(self, img, mask, bbox):
         # mask image:
