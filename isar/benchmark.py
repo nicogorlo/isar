@@ -19,7 +19,7 @@ class Benchmark():
         self.datadir_DAVIS = datadir_davis
         self.datadir_Habitat_single_obj = datadir_habitat
 
-        self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, n_per_side=16)
+        self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16)
         # self.detector = Detector("cpu", "vit_h")
 
         self.stats = {}
@@ -132,6 +132,9 @@ class Benchmark():
     
         return task_stats
 
+
+
+
 def main(outdir, datadir_davis, datadir_habitat):
     
     bm = Benchmark(outdir, datadir_davis, datadir_habitat)
@@ -149,11 +152,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a DAVIS and a Habitat dataset")
 
     parser.add_argument(
-        "-d", "--datadir_davis", type=str, default="/home/nico/semesterproject/data/DAVIS_single_object_tracking/", 
+        "-dd", "--datadir_davis", type=str, default="/home/nico/semesterproject/data/DAVIS_single_object_tracking/", 
         help="Path to the DAVIS dataset"
     )
     parser.add_argument(
-        "-h", "--datadir_habitat", type=str, default="/home/nico/semesterproject/data/habitat_single_object_tracking/", 
+        "-dh", "--datadir_habitat", type=str, default="/home/nico/semesterproject/data/habitat_single_object_tracking/", 
         help="Path to the Habitat dataset"
     )
     parser.add_argument(

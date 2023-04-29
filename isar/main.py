@@ -32,7 +32,7 @@ def main(datadir, outdir, dataset, task):
 	
 	use_precomputed_embeddings = True
 	# detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
-	detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings, n_per_side=16)
+	detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings, outdir = outdir, n_per_side=16)
 
 	ui = UserInterface(detector=detector)
 	if dataset == 'DAVIS' or dataset == 'Habitat_single_obj':

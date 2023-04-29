@@ -3,6 +3,8 @@ import cv2
 import os
 import random
 
+from typing import Any, Dict, List, Optional, Tuple
+
 import torch
 from torch import nn
 from torchvision.models import resnet50
@@ -20,7 +22,6 @@ from segment_anything.utils.amg import batch_iterator, build_all_layer_point_gri
 from detector import Detector
 
 #automatic mask generator:
-from typing import Any, Dict, List, Optional, Tuple
 from segment_anything.modeling import Sam
 from segment_anything.utils.amg import MaskData, uncrop_boxes_xyxy, uncrop_points
 from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
@@ -28,11 +29,12 @@ from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
 from scipy.spatial import distance
 from sklearn.metrics.pairwise import cosine_similarity
 
+from params import FeatureModes
 
 
 class SAMDetector(Detector): # inherits from Detector, not really necessary just for consistency to make sure the same member functions are defined.
 
-    def __init__(self, device = "cpu", sam_model_type = "vit_h", use_precomputed_embeddings = False, n_per_side = 16) -> None:
+    def __init__(self, device = "cpu", sam_model_type = "vit_h", use_precomputed_embeddings = False, outdir = OUTDIR, n_per_side = 16) -> None:
 
         device = device  ## RIGHT now running on CPU, as Laptop GPU memory not sufficient
         model_type = sam_model_type
@@ -42,23 +44,23 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
         self.start_reid = False
 
-        self.clip = Reidentification()
-
         self.show_images = True
 
-        self.outdir = OUTDIR
+        self.outdir = outdir
 
         self.point_grid = build_point_grid(n_per_side)
 
+        # SAM model:
         self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         self.sam.to(device=device)
-
-        self.template_feature = None
-
         self.predictor = SamPredictor(self.sam)
         self.single_mask_generator = SingleCropMaskGenerator(self.predictor, points_per_side = n_per_side)
 
-    
+        self.template_feature = None
+
+        self.clip = Reidentification()
+        
+
         self.semantic_palette = np.array([generate_pastel_color() for _ in range(256)],dtype=np.uint8)
 
 
@@ -147,8 +149,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
             mask_descriptors = np.array(mask_descriptors)
 
             # classifier 1: cosine similarity/dot product
-            with performance_measure("cosine similarity"):
-                max_similarity, max_similarity_idx, similarities = self.compute_similarities_dotp(mask_descriptors)
+            max_similarity, max_similarity_idx, similarities = self.compute_similarities_dotp(mask_descriptors)
             mask = masks[max_similarity_idx]
 
             # classifier 2: nearest neighbor
@@ -173,10 +174,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
             self.predictor.reset_image()
 
             boxes = np.array(boxes)
-            scores = np.array([similarities[i] for i in range(len(masks))])
-
-            # scores = np.array([0.0 for i in range(len(masks))])
-            # scores[nearest_neighbor_index] = 1.0        
+            scores = np.array([similarities[i] for i in range(len(masks))])       
 
         return scores, boxes, show_mask
 
@@ -223,7 +221,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
     
     def segment_all(self, img: np.ndarray, embedding: str):
 
-        with performance_measure("segment all"):
+        with performance_measure("SAM mask generator"):
 
             res = self.single_mask_generator.generate(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             masks = [res[i]["segmentation"] for i in range(len(res))]
@@ -231,7 +229,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         return masks
 
     def set_img_embedding(self, image: np.ndarray, embedding = None):
-        with performance_measure("segmentation"):
+        with performance_measure("SAM embedding"):
 
             # get image embedding:
             # precomputed_embeddings:
@@ -260,9 +258,8 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
                     if not os.path.exists(os.path.split(embedding)[0]):
                         os.makedirs(os.path.split(embedding)[0])
 
-                    if not os.path.exists(embedding):
-                        features = self.predictor.get_image_embedding()
-                        torch.save(features, embedding)
+                    features = self.predictor.get_image_embedding()
+                    torch.save(features, embedding)
 
             else:
                 self.predictor.set_image(image, image_format='BGR')

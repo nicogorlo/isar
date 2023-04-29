@@ -1,4 +1,6 @@
 import os
+from enum import IntEnum
+
 ## general: 
 
 FPS: int = 15
@@ -12,6 +14,16 @@ NUM_BOXES = 100
 ADA_THRESH_MAX_OVERLAP = 0.4
 ADA_THRESH_MULTIPLIER = 1.05
 
+
+## Descriptor configurations:
+
+class FeatureModes(IntEnum):
+    """
+    Enum for feature vector modes
+    """
+    SAM = 0
+    CLIP = 1
+    CLIP_SAM = 2
 
 
 ## Data: (not relevant when running benchmark)

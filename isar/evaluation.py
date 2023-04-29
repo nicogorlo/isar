@@ -44,7 +44,7 @@ class Evaluation():
             raise Exception("No ground truth mask found for image {}".format(image_name))
         gt_mask = cv2.cvtColor(gt_mask, cv2.COLOR_BGR2GRAY)
         gt_mask = gt_mask > 0
-        return gt_mask
+        return gt_mask.astype("uint8")
     
 
 
