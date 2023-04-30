@@ -23,7 +23,7 @@ def main(datadir, outdir, dataset, task, feature_mode_str):
 
 	if not os.path.exists(outdir):
 		os.makedirs(outdir)
-	
+
 	use_precomputed_embeddings = True
 
 	if feature_mode == FeatureModes.DETR_CLIP:

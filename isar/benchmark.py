@@ -139,7 +139,8 @@ class Benchmark():
         task_stats = eval.report_results(task)
     
         return task_stats
-
+    
+from datetime import datetime
 
 
 
@@ -152,6 +153,7 @@ def main(outdir, datadir_davis, datadir_habitat, feature_mode_str):
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
     bm.run()
+
     stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
