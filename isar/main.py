@@ -12,28 +12,26 @@ from evaluation import Evaluation
 
 import torch
 
-import sys
-sys.path.append('external/dino-vit-features')
-
-from params import DATADIR, DATASET, EVALDIR, IMGDIR, TASK, OUTDIR, FPS, EMBDIR
+from params import DATADIR, DATASET, EVALDIR, IMGDIR, TASK, OUTDIR, FPS, EMBDIR, FeatureModes
 
 
 fps = 10
 
 
-def main(datadir, outdir, dataset, task):
-
-	IMGDIR = os.path.join(datadir, task, "rgb")
-	EVALDIR = os.path.join(datadir, task, "semantics")
-	EMBDIR = os.path.join(datadir, task, "embeddings")
+def main(datadir, outdir, dataset, task, feature_mode_str):
+	feature_mode = FeatureModes[feature_mode_str]
 
 	if not os.path.exists(outdir):
 		os.makedirs(outdir)
 	
 	use_precomputed_embeddings = True
-	# detector = Detector("cpu", "vit_h", use_precomputed_embeddings)
-	detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings, outdir = outdir, n_per_side=16)
 
+	if feature_mode == FeatureModes.DETR_CLIP:
+		detector = Detector("cpu", "vit_h")
+	else: 
+		detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16, feature_mode=feature_mode)
+	    
+	
 	ui = UserInterface(detector=detector)
 	if dataset == 'DAVIS' or dataset == 'Habitat_single_obj':
 		eval = Evaluation(EVALDIR)
@@ -62,7 +60,7 @@ def main(datadir, outdir, dataset, task):
 			
 		show_img = img.copy()
 
-		if detector.start_reid:
+		if detector.start_reid and detector.__class__ == Detector:
 			ui.plot_boxes(show_img, prob, boxes)
 		
 		# if detector.__class__ == SAMDetector and detector.show_images:
@@ -101,7 +99,14 @@ if __name__ == "__main__":
 	parser.add_argument(
         "-t", "--task", type=str, default=TASK, help="name of the task (default: 'params/TASK')"
     )
+	parser.add_argument(
+        "-f", "--feature_mode", type=str, default="CLIP_SAM", choices=["SAM", "CLIP", "CLIP_SAM", "DETR_CLIP"],
+    )
 
 	args = parser.parse_args()
 
-	main(args.datadir, args.outdir, args.dataset, args.task)
+	IMGDIR = os.path.join(args.datadir, args.task, "rgb")
+	EVALDIR = os.path.join(args.datadir, args.task, "semantics")
+	EMBDIR = os.path.join(args.datadir, args.task, "embeddings")
+
+	main(args.datadir, args.outdir, args.dataset, args.task, args.feature_mode)

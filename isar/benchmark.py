@@ -12,15 +12,20 @@ from reidentification import Reidentification
 from evaluation import Evaluation
 from util.isar_utils import get_image_it_from_folder
 
+from params import FeatureModes
+
 
 class Benchmark():
-    def __init__(self, outdir, datadir_davis, datadir_habitat):
+    def __init__(self, outdir, datadir_davis, datadir_habitat, feature_mode=FeatureModes.CLIP_SAM):
         self.datasets = ['DAVIS_single_obj', 'Habitat_single_obj']
         self.datadir_DAVIS = datadir_davis
         self.datadir_Habitat_single_obj = datadir_habitat
 
-        self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16)
-        # self.detector = Detector("cpu", "vit_h")
+        if feature_mode == FeatureModes.DETR_CLIP:
+            self.detector = Detector("cpu", "vit_h")
+        else: 
+            self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16, feature_mode=feature_mode)
+        
 
         self.stats = {}
 
@@ -138,9 +143,10 @@ class Benchmark():
 
 
 
-def main(outdir, datadir_davis, datadir_habitat):
+def main(outdir, datadir_davis, datadir_habitat, feature_mode_str):
+    feature_mode = FeatureModes[feature_mode_str]
     
-    bm = Benchmark(outdir, datadir_davis, datadir_habitat)
+    bm = Benchmark(outdir, datadir_davis, datadir_habitat, feature_mode)
     bm.use_gt_mask_first_image = True
     bm.print_gt_feature_distance = True
     now = datetime.now()
@@ -166,7 +172,10 @@ if __name__ == "__main__":
         "-o", "--outdir", type=str, default="/home/nico/semesterproject/test/",
         help="Path to the output directory"
     )
+    parser.add_argument(
+        "-f", "--feature_mode", type=str, default="CLIP_SAM", choices=["SAM", "CLIP", "CLIP_SAM", "DETR_CLIP"],
+    )
 
     args = parser.parse_args()
     
-    main(args.outdir, args.datadir_davis, args.datadir_habitat)
+    main(args.outdir, args.datadir_davis, args.datadir_habitat, args.feature_mode)

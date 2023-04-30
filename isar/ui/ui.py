@@ -16,23 +16,23 @@ class UserInterface():
 
         cv2.namedWindow('image')
         cv2.createButton('ReID', self.on_button_press, None, cv2.QT_PUSH_BUTTON|cv2.QT_NEW_BUTTONBAR, 0)
-        cv2.namedWindow('freeze')
-        cv2.namedWindow('cutout')
+        # cv2.namedWindow('freeze')
+        # cv2.namedWindow('cutout')
         cv2.namedWindow('seg')
-        cv2.namedWindow('match')
+        # cv2.namedWindow('match')
         cv2.setMouseCallback('image',self.select)
 
         cv2.moveWindow('image', 0, 0)
-        cv2.moveWindow('freeze', 450, 0)
-        cv2.moveWindow('cutout', 850, 0)
+        # cv2.moveWindow('freeze', 450, 0)
+        # cv2.moveWindow('cutout', 850, 0)
         cv2.moveWindow('seg', 850, 220)
-        cv2.moveWindow('match', 850, 500)
+        # cv2.moveWindow('match', 850, 500)
 
         self.img = np.zeros((192,256,3), np.uint8)
         self.detect_frame = np.zeros((192,256,3), np.uint8)
         self.embedding = None
 
-        cv2.imshow('freeze', self.detect_frame)
+        # cv2.imshow('freeze', self.detect_frame)
         cv2.imshow('image', self.img)
 
 
@@ -42,10 +42,10 @@ class UserInterface():
             self.ix,self.iy = x,y
             cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x, y, self.img, self.embedding)
 
-            cv2.imshow('cutout', cutout)
-            # cv2.imshow('seg', seg)
-            self.plot_single_box(self.img, selected_prob, selected_box)
-            cv2.imshow('freeze', freeze)
+            # cv2.imshow('cutout', cutout)
+            # # cv2.imshow('seg', seg)
+            # # self.plot_single_box(self.img, selected_prob, selected_box)
+            # cv2.imshow('freeze', freeze)
 
 
     def plot_single_box(self, img, prob, box):

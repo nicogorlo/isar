@@ -24,6 +24,7 @@ class FeatureModes(IntEnum):
     SAM = 0
     CLIP = 1
     CLIP_SAM = 2
+    DETR_CLIP = 3
 
 
 ## Data: (not relevant when running benchmark)
@@ -55,8 +56,8 @@ class FeatureModes(IntEnum):
 # DAVIS:
 DATASET = 'DAVIS'
 TASK = "bear"
-DATADIR = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/"
-IMGDIR = os.path.join(DATADIR, "JPEGImages/480p/", TASK)
-EVALDIR = os.path.join(DATADIR, "Annotations_unsupervised/480p/", TASK)
-EMBDIR = os.path.join(DATADIR, "ImageEmbeddings/", TASK)
+DATADIR = "/home/nico/semesterproject/data/DAVIS_single_object_tracking/"
+IMGDIR = os.path.join(DATADIR, TASK, "rgb")
+EVALDIR = os.path.join(DATADIR, TASK, "semantics")
+EMBDIR = os.path.join(DATADIR, TASK, "embeddings")
 OUTDIR = os.path.join("/home/nico/semesterproject/test/", TASK)

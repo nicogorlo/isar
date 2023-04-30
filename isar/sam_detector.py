@@ -36,7 +36,7 @@ from params import FeatureModes
 
 class SAMDetector(Detector): # inherits from Detector, not really necessary just for consistency to make sure the same member functions are defined.
 
-    def __init__(self, device = "cpu", sam_model_type = "vit_h", use_precomputed_embeddings = False, outdir = OUTDIR, n_per_side = 16) -> None:
+    def __init__(self, device = "cpu", sam_model_type = "vit_h", use_precomputed_embeddings = False, outdir = OUTDIR, n_per_side = 16, feature_mode = FeatureModes.CLIP_SAM) -> None:
 
         device = device  ## RIGHT now running on CPU, as Laptop GPU memory not sufficient
         model_type = sam_model_type
@@ -44,7 +44,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
         self.use_precomputed_embedding = use_precomputed_embeddings
         
-        self.feature_mode = FeatureModes.CLIP_SAM
+        self.feature_mode = feature_mode
 
         self.start_reid = False
 
