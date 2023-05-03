@@ -27,8 +27,8 @@ def plot_mious(mious_list, titles):
         mious_values = [mious[entry] for entry in common_entries]
         rects = ax.bar(x + (i - (len(mious_list)-1)/2) * width, mious_values, width, label=title)
 
-    ax.set_ylabel('mIoU')
-    ax.set_title('mIoU Comparison')
+    ax.set_ylabel('misclassifications (IoU < 0.4)')
+    ax.set_title('misclassification rate comparison')
     ax.set_xticks(x)
     ax.set_xticklabels(common_entries, rotation=90)
     ax.legend()
@@ -37,7 +37,7 @@ def plot_mious(mious_list, titles):
     plt.show()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Compare mIoU values from multiple JSON files")
+    parser = argparse.ArgumentParser(description="Compare miclassification values from multiple JSON files")
     parser.add_argument("filepaths", nargs="+", help="Paths to JSON files")
     args = parser.parse_args()
 
