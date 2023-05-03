@@ -45,6 +45,12 @@ class DinoDetector():
 
         self.patch_h = 40
         self.patch_w = 40
+        self.upsampled_h = 512
+        self.upsampled_w = 512
+
+        self.upsampled_feature_vectors = True
+
+        self.upsampler = nn.Upsample(size=(self.upsampled_h, self.upsampled_w), mode='bilinear', align_corners=False)
 
         # classifier:
         self.svm = LinearClassifier(self.dino_model.num_features, 1).to(device='cuda')
@@ -53,7 +59,11 @@ class DinoDetector():
 
         self.svm_conv = nn.Conv2d(self.dino_model.num_features, 1, kernel_size=1, stride=1, padding=0, device="cuda")
 
-        self.n_negative_features_same_image = 600
+        self.n_negative_features_same_image = 200
+
+        if self.upsampled_feature_vectors:
+            self.n_negative_features_same_image *= 16
+
         with open(f"../../data/dino_features_{dino_model_type}.pkl", "rb") as f:
             self.negative_sample_dict = pickle.load(f)
 
@@ -72,13 +82,13 @@ class DinoDetector():
         # 1. predict mask with sam_predictor
         if gt_mask is not None:
             mask = gt_mask
-            # mask = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST) > 0.5
-            sam_img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_NEAREST)
+            mask = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST) > 0.5
+            sam_img = cv2.resize(img, (self.upsampled_h, self.upsampled_w), interpolation=cv2.INTER_NEAREST)
         else: 
             with performance_measure("sam initial prediction"):
-                x = int(x * 512 / img.shape[1])
-                y = int(y * 512 / img.shape[0])
-                sam_img = cv2.resize(img, (512, 512))
+                x = int(x * self.upsampled_h / img.shape[1])
+                y = int(y * self.upsampled_w / img.shape[0])
+                sam_img = cv2.resize(img, (self.upsampled_h, self.upsampled_w))
 
                 self.set_sam_img_embedding(sam_img, embedding_sam)
 
@@ -96,24 +106,28 @@ class DinoDetector():
 
         with performance_measure("masked dino embeddings"):
             # 3. compute masked dino embeddings
-            img_features = self.extract_features_dino(self.dino_model, tensor)
-            mask_sml = (cv2.resize(mask.squeeze().astype(float), (self.patch_w, self.patch_h)) > 0.5)
-            mask_sml = mask_sml.reshape(self.patch_h * self.patch_w)
+            img_features = self.extract_features_dino(self.dino_model, tensor).to(device=self.device)
+            if self.upsampled_feature_vectors:
+                mask_flat = mask.reshape(self.upsampled_h * self.upsampled_w) > 0.5
+            else:
+                mask_sml = (cv2.resize(mask.squeeze().astype(float), (self.patch_w, self.patch_h)) > 0.5)
+                mask_flat = mask_sml.reshape(self.patch_h * self.patch_w)
 
         with performance_measure("create dataset"):
             # 4. get negative features from dataset
-            positive_features = img_features[mask_sml, :].cuda()
-            all_negative_features_image = img_features[~mask_sml, :] ### TODO: try to use all negative features from the same image
+            positive_features = img_features[mask_flat, :]
+            all_negative_features_image = img_features[~mask_flat, :] ### TODO: try to use all negative features from the same image
             negative_indices = torch.randperm(all_negative_features_image.shape[0])[:min(self.n_negative_features_same_image, all_negative_features_image.shape[0])]
             negative_features_image = all_negative_features_image[negative_indices]
-            negative_features = torch.cat([torch.cat(list(v.values())) for k,v in self.negative_sample_dict[dataset].items() if k != task])
+            negative_features = torch.cat([torch.cat(list(v.values())) for k,v in self.negative_sample_dict[dataset].items() if k != task]).to(device=self.device)
 
-            all_negative_features = torch.cat((negative_features, negative_features_image)).cuda()
-            negative_labels = torch.zeros(all_negative_features.shape[0]).cuda()
-            positive_labels = torch.ones(positive_features.shape[0]).cuda()
+            all_negative_features = torch.cat((negative_features, negative_features_image))
+            negative_labels = torch.zeros(all_negative_features.shape[0])
+            positive_labels = torch.ones(positive_features.shape[0])
 
 
-            features = torch.cat((positive_features, all_negative_features))
+            features = torch.cat((positive_features, all_negative_features)).cuda()
+
             # normalize features:
             features = features / torch.norm(features, dim=1, keepdim=True)
 
@@ -121,7 +135,7 @@ class DinoDetector():
             # features = ((features - features.min(dim=1).values.unsqueeze(-1)) / 
             #         (features.max(dim=1).values.unsqueeze(-1) - features.min(dim=1).values.unsqueeze(-1)))
 
-            labels = torch.cat((positive_labels, negative_labels))
+            labels = torch.cat((positive_labels, negative_labels)).cuda()
 
             class_counts = torch.bincount(labels.long())
             weights = 1.0 / class_counts[labels.long()]
@@ -146,10 +160,6 @@ class DinoDetector():
                 loss_list_ep = []
                 if epoch >= 8:
                     self.optimizer.param_groups[0]['lr'] = 0.01
-                # if epoch >= 15:
-                #     self.optimizer.param_groups[0]['lr'] = 0.001
-                # if epoch >= 18:
-                #     self.optimizer.param_groups[0]['lr'] = 0.0001
                 for batch, target in tqdm(dataloader):
                     self.optimizer.zero_grad()
                     # output = self.svm_conv(batch.transpose(0,1).unsqueeze(-1)).squeeze()
@@ -206,11 +216,13 @@ class DinoDetector():
 
         if self.start_reid:
             tensor = self.preprocess_image_dino(img).cuda()
-            img_features = self.extract_features_dino(self.dino_model, tensor)
-            img_features = img_features / torch.norm(img_features, dim=1, keepdim=True)
+            img_features = self.extract_features_dino(self.dino_model, tensor).cuda()
             svm_predictions = self.svm(img_features).detach().cpu().numpy()
             # svm_predictions = self.svm_conv(img_features.transpose(0,1).unsqueeze(-1)).detach().cpu().numpy()
-            out = (svm_predictions > self.margin/2).reshape((self.patch_h, self.patch_w))
+            if self.upsampled_feature_vectors:
+                out = (svm_predictions > self.margin/2).reshape((self.upsampled_h, self.upsampled_w))
+            else:
+                out = (svm_predictions > self.margin/2).reshape((self.patch_h, self.patch_w))
             out = cv2.resize(out.astype(float), (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST).astype("float64")
 
             boxes = [self.get_bbox_from_mask(out)]
@@ -248,9 +260,17 @@ class DinoDetector():
     def extract_features_dino(self, model, input_tensor):
         with torch.no_grad():
             features_dict = model.forward_features(input_tensor)
-            features = features_dict['x_norm_patchtokens']
+            features = features_dict['x_norm_patchtokens'].squeeze()
             # features = features.reshape(patch_h, patch_w, feat_dim)
-        return features.squeeze()
+            if self.upsampled_feature_vectors:
+                features = features.reshape(self.patch_w, self.patch_h, -1).to(device=self.device)
+                features = self.upsampler(features.permute(2, 0, 1).unsqueeze(0)).squeeze(0).permute(1, 2, 0)
+                features = features.reshape(self.upsampled_h * self.upsampled_w, -1)
+
+            # normalize features:
+            features = features / torch.norm(features, dim=1, keepdim=True)
+
+        return features
     
     def set_sam_img_embedding(self, image: np.ndarray, embedding = None):
 
