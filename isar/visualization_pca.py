@@ -20,20 +20,29 @@ class VisualizationPca():
         self.patch_w = patch_w
         self.patch_h = patch_h
 
-        self.pca = PCA(n_components=1)
+        self.pca = PCA(n_components=3)
         self.pca.fit(self.template_descriptors)
 
     def transform(self, descriptors: np.ndarray):
         principal_components = self.pca.transform(descriptors)
         # min max normalization:
-        principal_components = (principal_components - np.min(principal_components)) / (np.max(principal_components) - np.min(principal_components))
+        principal_components = self.min_max_normalization(principal_components)
 
-        return principal_components
+        return principal_components 
     
     def visualize(self, principal_components: np.ndarray, img_shape):
-        principal_components = principal_components * 255
-        principal_components = principal_components.reshape(self.patch_h, self.patch_w, 1)
+        principal_components = principal_components
+        principal_components = principal_components.reshape(self.patch_h, self.patch_w, 3)
         principal_components = cv2.resize(principal_components, (img_shape[1], img_shape[0]), interpolation=cv2.INTER_LINEAR)
-        cv2.imshow("pca", principal_components.astype("uint8"))
+        cv2.imshow("pca", principal_components.astype("float64"))
 
+        cv2.waitKey(0)
+
+    def min_max_normalization(self,arr):
+        # Perform min-max normalization for each channel
+        min_vals = np.min(arr, axis=0)
+        max_vals = np.max(arr, axis=0)
+        normalized_arr = (arr - min_vals) / (max_vals - min_vals)
+
+        return normalized_arr
 
