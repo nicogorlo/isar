@@ -14,6 +14,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, BatchSampler,Sampler
 from torchmetrics import HingeLoss
 
+
 from sklearn.decomposition import PCA
 
 from params import OUTDIR
@@ -40,23 +41,23 @@ class DinoDetector():
         self.single_crop_mask_generator = SingleCropMaskGenerator(self.sam_predictor, points_per_side = n_per_side)
 
         # DINO model:
-        self.dino_model = self.load_dino_v2_model(dino_model_type)
+        self.dino_model = self.load_dino_v2_model(dino_model_type).to(device='cuda')
 
         self.patch_h = 40
         self.patch_w = 40
 
         # classifier:
-        self.svm = LinearClassifier(self.dino_model.num_features, 1)
-        self.loss = nn.HingeEmbeddingLoss(reduction='mean')
-        self.optimizer = optim.Adam(self.svm.parameters(), lr=0.01)#, momentum=0.9)
+        self.svm = LinearClassifier(self.dino_model.num_features, 1).to(device='cuda')
+        self.loss = nn.HingeEmbeddingLoss(reduction='mean').to(device='cuda')
+        self.optimizer = optim.SGD(self.svm.parameters(), lr=0.1, momentum=0.9)
 
-        self.svm_conv = nn.Conv2d(self.dino_model.num_features, 1, kernel_size=1, stride=1, padding=0, device=self.device)
+        self.svm_conv = nn.Conv2d(self.dino_model.num_features, 1, kernel_size=1, stride=1, padding=0, device="cuda")
 
-        self.n_negative_features_same_image = 200
+        self.n_negative_features_same_image = 600
         with open(f"../../data/dino_features_{dino_model_type}.pkl", "rb") as f:
             self.negative_sample_dict = pickle.load(f)
-        
 
+        self.margin = 0.0
         
         # self.sampler = BatchSampler()
         # self.dataloader = DataLoader(batch_size=32, shuffle=True, num_workers=2)
@@ -65,58 +66,72 @@ class DinoDetector():
         self.semantic_palette = np.array([generate_pastel_color() for _ in range(256)],dtype=np.uint8)
 
 
-    def on_click(self, x: int, y: int, img: np.ndarray, embedding_sam: str, dataset = 'DAVIS_single_obj',task: str = 'bear'):
-
+    def on_click(self, x: int, y: int, img: np.ndarray, embedding_sam: str, dataset = 'DAVIS_single_obj',task: str = 'bear', gt_mask = None):
+        self.start_reid = True
+        torch.set_grad_enabled(True)
         # 1. predict mask with sam_predictor
-        with performance_measure("sam initial prediction"):
-            x = int(x * 512 / img.shape[1])
-            y = int(y * 512 / img.shape[0])
-            sam_img = cv2.resize(img, (512, 512))
+        if gt_mask is not None:
+            mask = gt_mask
+            # mask = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST) > 0.5
+            sam_img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_NEAREST)
+        else: 
+            with performance_measure("sam initial prediction"):
+                x = int(x * 512 / img.shape[1])
+                y = int(y * 512 / img.shape[0])
+                sam_img = cv2.resize(img, (512, 512))
 
-            self.set_sam_img_embedding(sam_img, embedding_sam)
+                self.set_sam_img_embedding(sam_img, embedding_sam)
 
-            mask, iou_prediction, _ = self.sam_predictor.predict(
-                point_coords=np.array([[x, y]]),
-                point_labels=np.array([1]),
-                box=None,
-                multimask_output=False,
-            )
+                mask, iou_prediction, _ = self.sam_predictor.predict(
+                    point_coords=np.array([[x, y]]),
+                    point_labels=np.array([1]),
+                    box=None,
+                    multimask_output=False,
+                )
 
         with performance_measure("preprocess dino image"):
             # 2. preprocess image dino
             tensor = self.preprocess_image_dino(img)
 
 
-        with performance_measure("masekd_dino_embeddings"):
+        with performance_measure("masked dino embeddings"):
             # 3. compute masked dino embeddings
             img_features = self.extract_features_dino(self.dino_model, tensor)
             mask_sml = (cv2.resize(mask.squeeze().astype(float), (self.patch_w, self.patch_h)) > 0.5)
             mask_sml = mask_sml.reshape(self.patch_h * self.patch_w)
 
-            positive_features = img_features[mask_sml, :].cpu()
-
         with performance_measure("create dataset"):
             # 4. get negative features from dataset
-            all_negative_features_image = img_features[~mask_sml, :]
-            negative_indices = torch.randperm(all_negative_features_image.shape[0])[:self.n_negative_features_same_image]
+            positive_features = img_features[mask_sml, :].cuda()
+            all_negative_features_image = img_features[~mask_sml, :] ### TODO: try to use all negative features from the same image
+            negative_indices = torch.randperm(all_negative_features_image.shape[0])[:min(self.n_negative_features_same_image, all_negative_features_image.shape[0])]
             negative_features_image = all_negative_features_image[negative_indices]
             negative_features = torch.cat([torch.cat(list(v.values())) for k,v in self.negative_sample_dict[dataset].items() if k != task])
 
-            all_negative_features = torch.cat((negative_features, negative_features_image)).cpu()
-            negative_labels = torch.zeros(all_negative_features.shape[0]).cpu()
-            positive_labels = torch.ones(positive_features.shape[0]).cpu()
+            all_negative_features = torch.cat((negative_features, negative_features_image)).cuda()
+            negative_labels = torch.zeros(all_negative_features.shape[0]).cuda()
+            positive_labels = torch.ones(positive_features.shape[0]).cuda()
 
 
             features = torch.cat((positive_features, all_negative_features))
+            # normalize features:
+            features = features / torch.norm(features, dim=1, keepdim=True)
+
+            #min-max normalization:
+            # features = ((features - features.min(dim=1).values.unsqueeze(-1)) / 
+            #         (features.max(dim=1).values.unsqueeze(-1) - features.min(dim=1).values.unsqueeze(-1)))
+
             labels = torch.cat((positive_labels, negative_labels))
-            tensor_dataset = torch.utils.data.TensorDataset(features, labels)
-        
-            num_samples = len(tensor_dataset)
+
             class_counts = torch.bincount(labels.long())
             weights = 1.0 / class_counts[labels.long()]
+
+            labels = labels * 2 - 1
+            tensor_dataset = torch.utils.data.TensorDataset(features, labels)
+            num_samples = len(tensor_dataset)
             sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples, replacement=True)
 
-            dataloader = torch.utils.data.DataLoader(tensor_dataset, batch_size=1024, sampler = sampler, num_workers=8)
+            dataloader = torch.utils.data.DataLoader(tensor_dataset, batch_size=2048, sampler = sampler, num_workers=0)
 
         with performance_measure("train svm"):
             # 5. fit SVM to embeddings (+) and [random stored embeddings + embeddings outside mask] (-)
@@ -129,22 +144,38 @@ class DinoDetector():
                 print("Epoch: ", epoch)
                 # epoch_loss = self.train_svm(dataloader)
                 loss_list_ep = []
+                if epoch >= 8:
+                    self.optimizer.param_groups[0]['lr'] = 0.01
+                # if epoch >= 15:
+                #     self.optimizer.param_groups[0]['lr'] = 0.001
+                # if epoch >= 18:
+                #     self.optimizer.param_groups[0]['lr'] = 0.0001
                 for batch, target in tqdm(dataloader):
                     self.optimizer.zero_grad()
-                    output = self.svm(batch)
-                    hloss = self.loss(output, target)
+                    # output = self.svm_conv(batch.transpose(0,1).unsqueeze(-1)).squeeze()
+                    output = self.svm(batch).squeeze()
+                    hloss = torch.mean(torch.clamp(1 - target * output, min=0))
                     loss_list_ep.append(hloss.item())
                     hloss.backward()
                     self.optimizer.step()
                 print("Epoch_Loss", np.average(loss_list_ep))
+
+        self.margin = 2.0 / np.linalg.norm(self.svm.linear.weight.detach().cpu().numpy())
         
+        # TEST inference:
+        # with performance_measure("inference:"):
+        #     tensor = self.preprocess_image_dino(img).cuda()
+        #     img_features = self.extract_features_dino(self.dino_model, tensor)
+        #     img_features = img_features / torch.norm(img_features, dim=1, keepdim=True)
+        #     svm_predictions = self.svm(img_features).detach().cpu().numpy()
+        #     out = (svm_predictions > self.margin/2).reshape((self.patch_h, self.patch_w))
+        #     out = cv2.resize(out.astype(float), (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST).astype("float64")
 
-        #option1: 
-        # TODO: need better SVM prediction rule, maybe do normalization and centering before
-        with performance_measure("predict pixelwise"):
-            svm_predictions = self.svm(img_features.cpu()).detach().cpu().numpy()
-            out = (svm_predictions < -12000).reshape((self.patch_h, self.patch_w))
+        bgr_mask = self.show_mask(cv2.resize(mask.squeeze().astype(float), (img.shape[1], img.shape[0]))).astype("uint8")
 
+        dst = cv2.addWeighted(img.astype("uint8"), 0.7, bgr_mask.astype("uint8"), 0.3, 0).astype("uint8")
+        cv2.imshow("seg", dst)
+        cv2.waitKey(1000)
         # not functional yet:
 
         # with performance_measure("predict conv2d"):
@@ -158,23 +189,42 @@ class DinoDetector():
         #     cv2.imshow("svm_predictions", out.astype("float64"))
         #     cv2.waitKey(0)
 
-        #return cutout, show_mask, freeze, selected_prob, selected_box
-        pass
+        bbox = self.get_bbox_from_mask(mask)
+        if bbox is not None:
+            cutout = img[bbox[1]:bbox[3], bbox[0]:bbox[2], :]
+        else:
+            cutout = None
+
+        torch.set_grad_enabled(False)
+        return cutout, bgr_mask, img, 1.0, bbox
 
     def detect(self, img: np.ndarray, image_name: str, embedding: str):
-        
-        # 1. preprocess image 
-        tensor = self.preprocess_image_dino(img)
-        # 2. compute masked dino embeddings
-        img_features = self.extract_features_dino(self.dino_model, tensor)
 
-        svm_predictions = self.svm(img_features.cpu()).detach().cpu().numpy()
-        out = (svm_predictions < -12000).reshape((self.patch_h, self.patch_w))
-        cv2.imshow("svm_predictions", out.astype("float64"))
-        cv2.waitKey(1)
+        scores = None
+        boxes = None
+        show_mask = None
 
-        # return scores, boxes, show_mask
-        pass
+        if self.start_reid:
+            tensor = self.preprocess_image_dino(img).cuda()
+            img_features = self.extract_features_dino(self.dino_model, tensor)
+            img_features = img_features / torch.norm(img_features, dim=1, keepdim=True)
+            svm_predictions = self.svm(img_features).detach().cpu().numpy()
+            # svm_predictions = self.svm_conv(img_features.transpose(0,1).unsqueeze(-1)).detach().cpu().numpy()
+            out = (svm_predictions > self.margin/2).reshape((self.patch_h, self.patch_w))
+            out = cv2.resize(out.astype(float), (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST).astype("float64")
+
+            boxes = [self.get_bbox_from_mask(out)]
+            scores = [1.0]
+            show_mask = self.show_mask(out).astype("uint8")
+
+            dst = cv2.addWeighted(img.astype('uint8'), 0.7, show_mask.astype('uint8'), 0.3, 0).astype('uint8')
+
+            if self.show_images:
+                cv2.imshow("seg", dst)
+
+            cv2.imwrite(os.path.join(self.outdir, image_name), dst)
+
+        return scores, boxes, show_mask
     
 
     def load_dino_v2_model(self, dino_model_type):
@@ -235,17 +285,29 @@ class DinoDetector():
         else:
             self.sam_predictor.set_image(image, image_format='BGR')
     
-    def train_svm(self, dataloader):
-        loss_list_ep = []
+    def show_mask(self, mask: np.ndarray, random_color=False):
+        if random_color:
+            color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+        else:
+            color = np.array([0, 0, 255])
+        h, w = mask.shape[-2:]
+        mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+        
+        return mask_image
+    
+    def get_bbox_from_mask(self, mask: np.ndarray):
+        mask = mask.squeeze().astype(np.uint8)
+        if np.sum(mask) == 0:
+            return None
+        
+        row_indices, col_indices = np.where(mask)
 
-        for batch, target in tqdm(dataloader):
-            output = self.svm(batch)
-            hloss = self.loss(output.squeeze(), target)
-            loss_list_ep.append(hloss.item())
-            hloss.backward()
-            self.optimizer.step()
+        # Calculate the min and max row and column indices
+        row_min, row_max = np.min(row_indices), np.max(row_indices)
+        col_min, col_max = np.min(col_indices), np.max(col_indices)
 
-        return loss_list_ep
+        # Return the bounding box coordinates as a tuple
+        return (col_min, row_min, col_max, row_max)
         
 class LinearClassifier(nn.Module):
     def __init__(self, in_dim, out_dim):
@@ -276,8 +338,10 @@ def main():
         x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, 
         dataset=dataset, task=task)
     
-    print("Cutout: ", cutout)
-    
+    img = cv2.imread("/home/nico/semesterproject/data/DAVIS_single_object_tracking/rhino/rgb/0000020.jpg")
+    detector.detect(img, "00000020.jpg", "/home/nico/semesterproject/data/DAVIS_single_object_tracking/rhino/embeddings/0000020.pt")
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()

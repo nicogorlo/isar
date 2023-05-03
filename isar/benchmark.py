@@ -8,6 +8,7 @@ import argparse
 
 from detector import Detector
 from sam_detector import SAMDetector
+from dino_detector import DinoDetector
 from reidentification import Reidentification
 from evaluation import Evaluation
 from util.isar_utils import get_image_it_from_folder
@@ -23,10 +24,12 @@ class Benchmark():
 
         if feature_mode == FeatureModes.DETR_CLIP:
             self.detector = Detector("cpu", "vit_h")
+        elif feature_mode == FeatureModes.DINO_SVM:
+            self.detector = DinoDetector("cpu", "vit_h", "dinov2_vitl14", True, outdir, n_per_side=16)
         else: 
             self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16, feature_mode=feature_mode)
         
-
+        self.dataset = None
         self.stats = {}
 
         self.detector.show_images = True
@@ -45,6 +48,7 @@ class Benchmark():
             self.run_dataset(dataset)
 
     def run_dataset(self, dataset):
+        self.dataset = dataset
         if dataset == 'DAVIS_single_obj':
             self.stats[dataset] = self.run_single_object(self.datadir_DAVIS)
         elif dataset == 'Habitat_single_obj':
@@ -62,7 +66,7 @@ class Benchmark():
 
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if ".json" not in i][:10]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "blackswan" in i)]:
             print("Task: ", task)
 
             imgdir = os.path.join(taskdir, task, 'rgb/')
@@ -91,8 +95,23 @@ class Benchmark():
         if prompt is not None:
             img0 = cv2.imread(os.path.join(imgdir, image_names[0]))
             emb0 = os.path.join(embdir, image_names[0].replace(".jpg", ".pt"))
-            prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
-            cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x = prompt['x'], y = prompt['y'], img = img0, embedding=emb0)
+            if self.detector.__class__ == DinoDetector and self.use_gt_mask_first_image:
+                mask = eval.get_gt_mask(image_names[0])
+                cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
+                    x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, dataset = self.dataset, task = task,
+                    gt_mask= mask
+                    )     
+            else:
+                prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
+                if self.detector.__class__ == DinoDetector: 
+                    cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
+                        x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, dataset = self.dataset, task = task
+                        )
+                else: 
+                    cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
+                        x = prompt['x'], y = prompt['y'], img = img0, embedding=emb0
+                        )
+
 
             """
             for debug: compute template feature of gt mask of first image
@@ -108,7 +127,7 @@ class Benchmark():
         """
         iterate over all images in a task (e.g. '0000000.jpg', '0000001.jpg', ...)
         """
-        for image_name in image_names[10:]:
+        for image_name in image_names:
             img = cv2.imread(os.path.join(imgdir, image_name))
             emb = os.path.join(embdir, image_name.replace(".jpg", ".pt"))
 
@@ -141,8 +160,6 @@ class Benchmark():
         return task_stats
 
 
-
-
 def main(outdir, datadir_davis, datadir_habitat, feature_mode_str):
     feature_mode = FeatureModes[feature_mode_str]
     
@@ -151,8 +168,8 @@ def main(outdir, datadir_davis, datadir_habitat, feature_mode_str):
     bm.print_gt_feature_distance = True
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run()
-    stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
+    bm.run_dataset('DAVIS_single_obj')
+    stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_pigs.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
         json.dump(bm.stats, f, indent=4)
@@ -173,7 +190,7 @@ if __name__ == "__main__":
         help="Path to the output directory"
     )
     parser.add_argument(
-        "-f", "--feature_mode", type=str, default="CLIP_SAM", choices=["SAM", "CLIP", "CLIP_SAM", "DETR_CLIP"],
+        "-f", "--feature_mode", type=str, default="DINO_SVM", choices=["SAM", "CLIP", "CLIP_SAM", "DETR_CLIP", "DINO_SVM"],
     )
 
     args = parser.parse_args()

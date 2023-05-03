@@ -25,6 +25,7 @@ class FeatureModes(IntEnum):
     CLIP = 1
     CLIP_SAM = 2
     DETR_CLIP = 3
+    DINO_SVM = 4
 
 
 ## Data: (not relevant when running benchmark)
