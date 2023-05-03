@@ -64,7 +64,7 @@ class DinoDetector():
         if self.upsampled_feature_vectors:
             self.n_negative_features_same_image *= 16
 
-        with open(f"../../data/dino_features_{dino_model_type}.pkl", "rb") as f:
+        with open(f"feature_dict_dinov2/dino_features_{dino_model_type}.pkl", "rb") as f:
             self.negative_sample_dict = pickle.load(f)
 
         self.margin = 0.0
