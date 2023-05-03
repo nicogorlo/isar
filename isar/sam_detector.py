@@ -6,28 +6,19 @@ import random
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
-from torch import nn
-from torchvision.models import resnet50
-import torchvision.transforms as T
 torch.set_grad_enabled(False)
 
 from params import OUTDIR
 from util.isar_utils import performance_measure, semantic_obs_to_img, generate_pastel_color
-
 from reidentification import Reidentification
+from sam_mask_generator import SingleCropMaskGenerator
 
-from segment_anything import sam_model_registry, SamPredictor, SamAutomaticMaskGenerator
+from segment_anything import sam_model_registry, SamPredictor
 
-from segment_anything.utils.amg import batch_iterator, build_all_layer_point_grids, build_point_grid
+from segment_anything.utils.amg import build_point_grid
 from detector import Detector
 
-#automatic mask generator:
-from segment_anything.modeling import Sam
-from segment_anything.utils.amg import MaskData, uncrop_boxes_xyxy, uncrop_points
-from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
-
 from scipy.spatial import distance
-from sklearn.metrics.pairwise import cosine_similarity
 
 from visualization_pca import VisualizationPca
 
@@ -58,7 +49,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         self.sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         self.sam.to(device=device)
         self.predictor = SamPredictor(self.sam)
-        self.single_mask_generator = SingleCropMaskGenerator(self.predictor, points_per_side = n_per_side)
+        self.single_crop_mask_generator = SingleCropMaskGenerator(self.predictor, points_per_side = n_per_side)
 
         self.template_feature = None
 
@@ -262,7 +253,7 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
 
         with performance_measure("SAM mask generator"):
 
-            res = self.single_mask_generator.generate(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            res = self.single_crop_mask_generator.generate(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
             masks = [res[i]["segmentation"] for i in range(len(res))]
 
         return masks
@@ -351,71 +342,6 @@ class SAMDetector(Detector): # inherits from Detector, not really necessary just
         return combined_mask
     
 
-"""
-    SingleCropMaskGenerator
-    
-    This class inherits from the SamAutomaticMaskGenerator and is used to generate panoptic masks for a given image.
-    The difference to the SamAutomaticMaskGenerator is that it always only uses a single crop (the entire image) to compute backbone on.
-    That way we only have to compute the backbone once per image.
-
-"""
-class SingleCropMaskGenerator(SamAutomaticMaskGenerator):
-
-    # Default values are taken from the SamAutomaticMaskGenerator
-    def __init__(self, predictor: SamPredictor, points_per_side = 32) -> None:
-        super().__init__(predictor.model, points_per_side = points_per_side, points_per_batch = 64, pred_iou_thresh = 0.88, 
-                         stability_score_thresh = 0.95, stability_score_offset = 1.0, 
-                         box_nms_thresh = 0.7, crop_n_layers= 0, crop_nms_thresh = 0.7, 
-                         crop_overlap_ratio= 512 / 1500, crop_n_points_downscale_factor = 1, 
-                         point_grids = None, min_mask_region_area = 1000, output_mode = "binary_mask")
-        
-        self.crop_n_layers = 0
-        self.predictor = predictor
-    
-
-    """
-    redefined _process_crop, such that set_image() is not called again, but the precomputed embedding is used
-    """
-    def _process_crop(
-        self,
-        image: np.ndarray,
-        crop_box: List[int],
-        crop_layer_idx: int,
-        orig_size: Tuple[int, ...],
-    ) -> MaskData:
-        # Crop the image and calculate embeddings
-        cropped_im = image
-        cropped_im_size = cropped_im.shape[:2]
-
-        # Get points for this crop
-        points_scale = np.array(cropped_im_size)[None, ::-1]
-        points_for_image = self.point_grids[crop_layer_idx] * points_scale
-
-        # Generate masks for this crop in batches
-        data = MaskData()
-        for (points,) in batch_iterator(self.points_per_batch, points_for_image):
-            batch_data = self._process_batch(points, cropped_im_size, crop_box, orig_size)
-            data.cat(batch_data)
-            del batch_data
-
-        # Remove duplicates within this crop.
-        keep_by_nms = batched_nms(
-            data["boxes"].float(),
-            data["iou_preds"],
-            torch.zeros(len(data["boxes"])),  # categories
-            iou_threshold=self.box_nms_thresh,
-        )
-        data.filter(keep_by_nms)
-
-        # Return to the original image frame
-        data["boxes"] = uncrop_boxes_xyxy(data["boxes"], crop_box)
-        data["points"] = uncrop_points(data["points"], crop_box)
-        data["crop_boxes"] = torch.tensor([crop_box for _ in range(len(data["rles"]))])
-
-        return data
-
-
-
 from params import DATADIR, DATASET, EVALDIR, IMGDIR, TASK, OUTDIR, FPS, EMBDIR
 from util.isar_utils import get_image_it_from_folder
 
@@ -429,7 +355,7 @@ def main():
         os.makedirs(os.path.join("/home/nico/semesterproject/test/", TASK))
                 
     detector = SAMDetector("cpu", "vit_h")
-    single_mask_generator = SingleCropMaskGenerator(detector.predictor, points_per_side = 16)
+    single_crop_mask_generator = SingleCropMaskGenerator(detector.predictor, points_per_side = 16)
     detector.use_precomputed_embedding = True
     
     images = get_image_it_from_folder(IMGDIR)
@@ -446,7 +372,7 @@ def main():
         detector.set_img_embedding(img, embedding)
 
         with performance_measure("automatic mask generation"):
-            res = single_mask_generator.generate(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+            res = single_crop_mask_generator.generate(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
             masks = [res[i]["segmentation"] for i in range(len(res))]
 
