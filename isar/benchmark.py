@@ -17,17 +17,17 @@ from params import FeatureModes
 
 
 class Benchmark():
-    def __init__(self, outdir, datadir_davis, datadir_habitat, feature_mode=FeatureModes.CLIP_SAM):
+    def __init__(self, outdir, datadir_davis, datadir_habitat, feature_mode=FeatureModes.CLIP_SAM, device="cpu"):
         self.datasets = ['DAVIS_single_obj', 'Habitat_single_obj']
         self.datadir_DAVIS = datadir_davis
         self.datadir_Habitat_single_obj = datadir_habitat
 
         if feature_mode == FeatureModes.DETR_CLIP:
-            self.detector = Detector("cpu", "vit_h")
+            self.detector = Detector(device, "vit_h")
         elif feature_mode == FeatureModes.DINO_SVM:
-            self.detector = DinoDetector("cpu", "vit_h", "dinov2_vitl14", True, outdir, n_per_side=16)
+            self.detector = DinoDetector(device, "vit_h", "dinov2_vitl14", True, outdir, n_per_side=16)
         else: 
-            self.detector = SAMDetector("cpu", "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16, feature_mode=feature_mode)
+            self.detector = SAMDetector(device, "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16, feature_mode=feature_mode)
         
         self.dataset = None
         self.stats = {}
@@ -66,7 +66,7 @@ class Benchmark():
 
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "blackswan" in i)]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "vase" not in i)][:10]:
             print("Task: ", task)
 
             imgdir = os.path.join(taskdir, task, 'rgb/')
@@ -160,15 +160,15 @@ class Benchmark():
         return task_stats
 
 
-def main(outdir, datadir_davis, datadir_habitat, feature_mode_str):
+def main(outdir, datadir_davis, datadir_habitat, feature_mode_str, device):
     feature_mode = FeatureModes[feature_mode_str]
     
-    bm = Benchmark(outdir, datadir_davis, datadir_habitat, feature_mode)
+    bm = Benchmark(outdir, datadir_davis, datadir_habitat, feature_mode, device)
     bm.use_gt_mask_first_image = True
     bm.print_gt_feature_distance = True
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run_dataset('DAVIS_single_obj')
+    bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_pigs.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
@@ -192,7 +192,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "-f", "--feature_mode", type=str, default="DINO_SVM", choices=["SAM", "CLIP", "CLIP_SAM", "DETR_CLIP", "DINO_SVM"],
     )
+    
+    parser.add_argument(
+        "-dev", "--device", type=str, default="cpu", choices=["cpu", "cuda"],
+    )
 
     args = parser.parse_args()
     
-    main(args.outdir, args.datadir_davis, args.datadir_habitat, args.feature_mode)
+    main(args.outdir, args.datadir_davis, args.datadir_habitat, args.feature_mode, args.device)
