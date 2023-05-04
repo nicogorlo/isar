@@ -108,7 +108,8 @@ class DinoDetector():
             # 3. compute masked dino embeddings
             img_features = self.extract_features_dino(self.dino_model, tensor).to(device=self.device)
             if self.upsampled_feature_vectors:
-                mask_flat = mask.reshape(self.upsampled_h * self.upsampled_w) > 0.5
+                mask = cv2.GaussianBlur(mask.astype("float32"), (41, 41), 0) > 0.95
+                mask_flat = mask.reshape(self.upsampled_h * self.upsampled_w)
             else:
                 mask_sml = (cv2.resize(mask.squeeze().astype(float), (self.patch_w, self.patch_h)) > 0.5)
                 mask_flat = mask_sml.reshape(self.patch_h * self.patch_w)
