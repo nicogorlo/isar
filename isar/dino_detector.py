@@ -50,7 +50,7 @@ class DinoDetector():
 
         self.upsampled_feature_vectors = True
 
-        self.upsampler = nn.Upsample(size=(self.upsampled_h, self.upsampled_w), mode='bilinear', align_corners=False)
+        self.upsampler = nn.Upsample(size=(self.upsampled_h, self.upsampled_w), mode='bicubic', align_corners=False)
 
         # classifier:
         self.svm = LinearClassifier(self.dino_model.num_features, 1).to(device='cuda')
@@ -185,7 +185,7 @@ class DinoDetector():
 
         dst = cv2.addWeighted(img.astype("uint8"), 0.7, bgr_mask.astype("uint8"), 0.3, 0).astype("uint8")
         cv2.imshow("seg", dst)
-        cv2.waitKey(1000)
+        cv2.waitKey(int(1000/30))
         # not functional yet:
 
         # with performance_measure("predict conv2d"):
@@ -218,6 +218,7 @@ class DinoDetector():
             tensor = self.preprocess_image_dino(img).cuda()
             img_features = self.extract_features_dino(self.dino_model, tensor).cuda()
             svm_predictions = self.svm(img_features).detach().cpu().numpy()
+            self.visualize_svm_distance(svm_predictions, img)
             # svm_predictions = self.svm_conv(img_features.transpose(0,1).unsqueeze(-1)).detach().cpu().numpy()
             if self.upsampled_feature_vectors:
                 out = (svm_predictions > self.margin/2).reshape((self.upsampled_h, self.upsampled_w))
@@ -234,6 +235,7 @@ class DinoDetector():
             if self.show_images:
                 cv2.imshow("seg", dst)
 
+            cv2.waitKey(int(1000/30))
             cv2.imwrite(os.path.join(self.outdir, image_name), dst)
 
         return scores, boxes, show_mask
@@ -328,6 +330,33 @@ class DinoDetector():
 
         # Return the bounding box coordinates as a tuple
         return (col_min, row_min, col_max, row_max)
+
+    def visualize_svm_distance(self, svm_predictions, img):
+
+        if self.upsampled_feature_vectors:
+            svm_dist = svm_predictions.reshape((self.upsampled_h, self.upsampled_w))
+        else:
+            svm_dist = svm_predictions.reshape((self.patch_h, self.patch_w))
+
+        vis_margin = (self.margin/2 - svm_dist.min()) / (svm_dist.max() - svm_dist.min())
+
+        # resize to image size:
+        svm_dist = cv2.resize(svm_dist, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST)
+        svm_dist = svm_dist.astype("float32")
+        svm_dist = (svm_dist - svm_dist.min()) / (svm_dist.max() - svm_dist.min())
+
+        margin = (np.logical_and(svm_dist <= vis_margin*1.2, svm_dist >= vis_margin))
+        margin2 = (np.logical_and(svm_dist <= vis_margin*1.6, svm_dist >= vis_margin*1.5))
+        accepted = (svm_dist >= vis_margin*1.1)
+
+        svm_dist = cv2.cvtColor(svm_dist, cv2.COLOR_GRAY2BGR)
+        svm_dist[:, 1] = 0
+        svm_dist[:, 2] = 0
+        svm_dist[margin, 2] = 1.0
+        svm_dist[margin2, 1] = 1.0
+        # svm_dist[accepted, 1] = 1.0
+        
+        cv2.imshow("SVM Dist", cv2.addWeighted(img, 0.2, (svm_dist*255).astype("uint8"), 0.8, 0.0))
         
 class LinearClassifier(nn.Module):
     def __init__(self, in_dim, out_dim):
