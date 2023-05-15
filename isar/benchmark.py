@@ -25,7 +25,7 @@ class Benchmark():
         if feature_mode == FeatureModes.DETR_CLIP:
             self.detector = Detector(device, "vit_h")
         elif feature_mode == FeatureModes.DINO_SVM:
-            self.detector = DinoDetector(device, "vit_h", "dinov2_vitl14", True, outdir, n_per_side=16)
+            self.detector = DinoDetector(device, "vit_h", "dinov2_vitl14", use_precomputed_sam_embeddings = True, outdir = outdir, n_per_side=16)
         else: 
             self.detector = SAMDetector(device, "vit_h", use_precomputed_embeddings=True, outdir = outdir, n_per_side=16, feature_mode=feature_mode)
         
@@ -42,6 +42,9 @@ class Benchmark():
         self.use_gt_mask_first_image = False
         self.print_gt_feature_distance = False
 
+        if self.detector.__class__ == DinoDetector:
+            self.n_train_images = 5
+
     "iterate over all datasets (DAVIS_single_obj, Habitat_single_obj)"
     def run(self):
         for dataset in self.datasets:
@@ -56,7 +59,7 @@ class Benchmark():
         else:
             raise Exception("Dataset {} not supported".format(dataset))
         
-    "iterate over all tasks in a dataset (e.g. 'car', 'duck', 'giraffe', ...)"        
+    "iterate over all tasks in a dataset (e.g. 'car', 'duck', 'giraffe', ...)"
     def run_single_object(self, datadir):
 
         taskdir = datadir
@@ -66,7 +69,7 @@ class Benchmark():
 
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "vase" not in i)][:10]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)][:10]:
             print("Task: ", task)
 
             imgdir = os.path.join(taskdir, task, 'rgb/')
@@ -95,20 +98,32 @@ class Benchmark():
         if prompt is not None:
             img0 = cv2.imread(os.path.join(imgdir, image_names[0]))
             emb0 = os.path.join(embdir, image_names[0].replace(".jpg", ".pt"))
-            if self.detector.__class__ == DinoDetector and self.use_gt_mask_first_image:
-                mask = eval.get_gt_mask(image_names[0])
-                cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
-                    x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, dataset = self.dataset, task = task,
-                    gt_mask= mask
-                    )     
+            if self.detector.__class__ == DinoDetector:
+                if self.n_train_images == 1:
+                    if self.use_gt_mask_first_image:
+                        mask = eval.get_gt_mask(image_names[0])
+                        cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
+                            x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, dataset = self.dataset, task = task,
+                            gt_mask= mask
+                        )
+                    else:
+                        prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
+                        cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
+                            x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, dataset = self.dataset, task = task
+                            )
+                else:
+                    gt_masks = [eval.get_gt_mask(image_names[int(i*len(image_names)/self.n_train_images)]) 
+                                for i in range(self.n_train_images-1)] + [eval.get_gt_mask(image_names[-1])]
+                    imgs = [cv2.imread(os.path.join(imgdir, image_names[int(i*len(image_names)/self.n_train_images)])) 
+                            for i in range(self.n_train_images-1)] + [cv2.imread(os.path.join(imgdir, image_names[-1]))]
+                    embs = [os.path.join(embdir, image_names[int(i*len(image_names)/self.n_train_images)].replace(".jpg", ".pt")) 
+                            for i in range(self.n_train_images-1)] + [os.path.join(embdir, image_names[-1].replace(".jpg", ".pt"))]
+                    cutout, seg, freeze, selected_prob, selected_box = self.detector.multiple_views_input(
+                        imgs, embs, self.dataset, task, gt_masks
+                    )
             else:
                 prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
-                if self.detector.__class__ == DinoDetector: 
-                    cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
-                        x = prompt['x'], y = prompt['y'], img = img0, embedding_sam=emb0, dataset = self.dataset, task = task
-                        )
-                else: 
-                    cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
+                cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(
                         x = prompt['x'], y = prompt['y'], img = img0, embedding=emb0
                         )
 

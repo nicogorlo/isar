@@ -6,6 +6,7 @@ import pickle
 import json
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from scipy.ndimage import maximum_filter, generate_binary_structure, iterate_structure, binary_erosion
 
 import torch
 import torch.nn as nn
@@ -38,11 +39,10 @@ class DinoDetector():
         sam = sam_model_registry[sam_model_type](checkpoint=sam_checkpoint)
         sam.to(device=device)
         self.sam_predictor = SamPredictor(sam)
-        self.single_crop_mask_generator = SingleCropMaskGenerator(self.sam_predictor, points_per_side = n_per_side)
+        # self.single_crop_mask_generator = SingleCropMaskGenerator(self.sam_predictor, points_per_side = n_per_side)
 
         # DINO model:
         self.dino_model = self.load_dino_v2_model(dino_model_type).to(device='cuda')
-
         self.patch_h = 40
         self.patch_w = 40
         self.upsampled_h = 512
@@ -79,7 +79,15 @@ class DinoDetector():
         #visualizations:
         self.semantic_palette = np.array([generate_pastel_color() for _ in range(256)],dtype=np.uint8)
 
-    def on_click(self, x: int, y: int, img: np.ndarray, embedding_sam: str, dataset = 'DAVIS_single_obj',task: str = 'bear', gt_mask = None):
+    def on_click(
+            self, 
+            x: int, y: int, 
+            img: np.ndarray, 
+            embedding_sam: str, 
+            dataset = 'DAVIS_single_obj',
+            task: str = 'bear', 
+            gt_mask = None
+            ):
         self.start_reid = True
         torch.set_grad_enabled(True)
         # TODO: could add mirrored image for initial training
@@ -113,17 +121,70 @@ class DinoDetector():
             #   * BatchSGD optimizer, make sure classes in batches are balanced
             loss_list = self.train_svm(dataloader)
 
-        self.margin = 2.0 / np.linalg.norm(self.svm.linear.weight.detach().cpu().numpy())
-        
-        # TEST inference:
-        # with performance_measure("inference:"):
-        #     tensor = self.preprocess_image_dino(img).cuda()
-        #     img_features = self.extract_features_dino(self.dino_model, tensor)
-        #     img_features = img_features / torch.norm(img_features, dim=1, keepdim=True)
-        #     svm_predictions = self.svm(img_features).detach().cpu().numpy()
-        #     out = (svm_predictions > self.margin/2).reshape((self.patch_h, self.patch_w))
-        #     out = cv2.resize(out.astype(float), (img.shape[1], img.shape[0]), interpolation=cv2.INTER_NEAREST).astype("float64")
+        bgr_mask = self.show_mask(cv2.resize(mask.squeeze().astype(float), (img.shape[1], img.shape[0]))).astype("uint8")
 
+        dst = cv2.addWeighted(img.astype("uint8"), 0.7, bgr_mask.astype("uint8"), 0.3, 0).astype("uint8")
+        cv2.imshow("seg", dst)
+        cv2.waitKey(int(1000/30))
+
+        bbox = self.get_bbox_from_mask(mask)
+        if bbox is not None:
+            cutout = img[bbox[1]:bbox[3], bbox[0]:bbox[2], :]
+        else:
+            cutout = None
+
+        del tensor_in, tensor_dataset, sampler, dataloader
+        torch.cuda.empty_cache()
+
+        torch.set_grad_enabled(False)
+        return cutout, bgr_mask, img, 1.0, bbox
+    
+    def multiple_views_input(
+            self, 
+            imgs: list[np.ndarray], 
+            embeddings_sam: list[str], 
+            dataset = 'DAVIS_single_obj',
+            task: str = 'bear', 
+            gt_masks: list = []
+            ):
+        """
+        take multiple views of scene for training svm
+        """
+        self.start_reid = True
+        torch.set_grad_enabled(True)
+
+        flat_masks_list = []
+        img_features_list = []
+        self.n_negative_features_same_image *= 3
+
+        for idx, img in enumerate(imgs):
+            # TODO: could add mirrored image for initial training
+
+            img_square = cv2.resize(img, (self.upsampled_h, self.upsampled_w), interpolation=cv2.INTER_LINEAR)
+            # 1. predict mask with sam_predictor
+            mask = gt_masks[idx]
+            mask = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST) > 0.5
+
+            # 2. preprocess image dino
+            tensor_in = self.preprocess_image_dino(img)
+
+            # 3. compute masked dino embeddings
+            img_features, mask_flat = self.compute_img_dino_embeddings(tensor_in, mask)
+
+            flat_masks_list.append(mask_flat)
+            img_features_list.append(img_features)
+        img_features = torch.cat(img_features_list, dim=0)
+        mask_flat = np.concatenate(flat_masks_list, axis=0)
+
+        tensor_dataset, weights = self.create_svm_dataset(img_features, mask_flat, dataset, task)            
+        num_samples = len(tensor_dataset)
+        sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples, replacement=True)
+        dataloader = torch.utils.data.DataLoader(tensor_dataset, batch_size=2048, sampler = sampler, num_workers=0)
+
+        loss_list = self.train_svm(dataloader)
+
+        img = imgs[0]
+        mask = gt_masks[0]
         bgr_mask = self.show_mask(cv2.resize(mask.squeeze().astype(float), (img.shape[1], img.shape[0]))).astype("uint8")
 
         dst = cv2.addWeighted(img.astype("uint8"), 0.7, bgr_mask.astype("uint8"), 0.3, 0).astype("uint8")
@@ -180,8 +241,11 @@ class DinoDetector():
                     if self.use_sam_refinement and out.sum() > 200:
                         disconnected_masks = self.one_hot_encode_binary_mask(out)
                         if disconnected_masks:
+                            filtered_mask = np.logical_or.reduce(disconnected_masks)
                             largest_connected_mask = max(disconnected_masks, key = lambda x: np.sum(x))
-                            out = self.sam_refinement(img_square, out, svm_predictions.reshape((self.upsampled_h, self.upsampled_w)), embedding)
+                            out = self.sam_refinement(img_square, filtered_mask, svm_predictions.reshape((self.upsampled_h, self.upsampled_w)), embedding)
+                        else:
+                            out = np.zeros_like(out, bool)
                 else:
                     out = (svm_predictions > self.margin/2).reshape((self.patch_h, self.patch_w))
                     if self.use_sam_refinement and out.sum() > 200:
@@ -427,18 +491,58 @@ class DinoDetector():
     
     def sam_refinement(self, img_square, mask, svm_predictions, embedding: str = None):
 
+        prompt_points, prompt_labels = self.get_sam_prompts(svm_predictions, mask)
+        #could also sample positive points from the mask and negative from outside the mask
         self.set_sam_img_embedding(img_square, embedding)
         bbox = np.array(self.get_bbox_from_mask(mask))
-        mask = cv2.resize(mask.astype("float32"), (256, 256)) >0.5
+        mask = cv2.resize(mask.astype("float32"), (256, 256)) > 0.5
 
-        mask_refined, iou_prediction, _ = self.sam_predictor.predict(
+        mask_refined, iou_prediction, logits = self.sam_predictor.predict(
                     mask_input=np.expand_dims(mask * 20 - 10, axis=0),
-                    box=bbox,
+                    point_coords=prompt_points,
+                    point_labels=prompt_labels.T.squeeze(),
                     multimask_output=False,
                 )
         self.sam_predictor.reset_image()
 
         return mask_refined.squeeze(0)
+    
+    def get_sam_prompts(self, svm_predictions, mask):
+        neighborhood_size = 10
+        n_maxima = 10
+        n_negative_points = 1000
+
+        data_max = maximum_filter(svm_predictions, size=neighborhood_size)
+        maxima = (svm_predictions == data_max)
+        
+        structure = iterate_structure(generate_binary_structure(2, 2), 1)
+        maxima = maxima ^ binary_erosion(maxima, structure, border_value=1)
+
+        coordinates = np.where(maxima)
+
+        maxima_values = svm_predictions[coordinates]
+
+        # Get the indices of the top n maxima
+        top_n_indices = np.argpartition(maxima_values, -n_maxima)[-n_maxima:]
+
+        # Get the coordinates of the top n maxima
+        top_n_coordinates = coordinates[0][top_n_indices], coordinates[1][top_n_indices]
+
+        positive_points = np.array(top_n_coordinates).T
+        positive_points = positive_points[:,(-1,0)]
+        positive_labels = np.ones(len(positive_points))
+
+        negative_sample_space = svm_predictions < 0.0
+        negative_points = np.array(np.where(negative_sample_space)).T
+        #random_subset:
+        negative_points = negative_points[np.random.choice(negative_points.shape[0], n_negative_points, replace=False)]
+        negative_points = negative_points[:,(-1,0)]
+        negative_labels = np.zeros(len(negative_points))
+
+        return np.concatenate([positive_points, negative_points], axis=0), np.concatenate([positive_labels, negative_labels], axis=0)
+        
+
+        
 class LinearClassifier(nn.Module):
     def __init__(self, in_dim, out_dim):
         super().__init__()
