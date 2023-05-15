@@ -22,10 +22,12 @@ def plot_mious(mious_list, titles):
     width = 0.8 / len(mious_list)
 
     fig, ax = plt.subplots()
+    #start from color 2: 
+    colors = plt.cm.get_cmap('tab10', 10).colors[1:]
 
     for i, (mious, title) in enumerate(zip(mious_list, titles)):
         mious_values = [mious[entry] for entry in common_entries]
-        rects = ax.bar(x + (i - (len(mious_list)-1)/2) * width, mious_values, width, label=title)
+        rects = ax.bar(x + (i - (len(mious_list)-1)/2) * width, mious_values, width, label=title, color = colors[i])
 
     ax.set_ylabel('misclassifications (IoU < 0.4)')
     ax.set_title('misclassification rate comparison')

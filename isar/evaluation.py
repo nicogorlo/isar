@@ -107,8 +107,8 @@ class Evaluation():
         predicted_contours = (predicted_contours.flatten() > 0).astype(int)
         gt_contours = (gt_contours.flatten() > 0).astype(int)
         
-        # Calculate precision, recall, and F-measure
-        precision, recall, f_measure, _ = precision_recall_fscore_support(gt_contours, predicted_contours, average='binary')
+        # Calculate precision, recall, and F-measure TODO: compute separately to take care of zero case.
+        precision, recall, f_measure, _ = precision_recall_fscore_support(gt_contours, predicted_contours, average='binary', zero_division=1)
         
         return precision, recall, f_measure
         

@@ -33,7 +33,7 @@ class VisualizationPca():
     def visualize(self, principal_components: np.ndarray, img_shape):
         principal_components = principal_components
         principal_components = principal_components.reshape(self.patch_h, self.patch_w, 3)
-        principal_components = cv2.resize(principal_components, (img_shape[1], img_shape[0]), interpolation=cv2.INTER_LINEAR)
+        principal_components = cv2.resize(principal_components, (img_shape[1], img_shape[0]), interpolation=cv2.INTER_NEAREST)
         cv2.imshow("pca", principal_components.astype("float64"))
 
         cv2.waitKey(0)

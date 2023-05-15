@@ -17,6 +17,7 @@ class HabitatSceneDataReader():
         os.makedirs(os.path.join(self.out_dir, 'rgb/'), exist_ok=True)
         os.makedirs(os.path.join(self.out_dir, 'semantics/'), exist_ok=True)
         os.makedirs(os.path.join(self.out_dir, 'embeddings/'), exist_ok=True)
+        os.makedirs(os.path.join(self.out_dir, 'combined_vis/'), exist_ok=True)
         self.count = 0
 
         self.initial_coordinates = None
@@ -87,13 +88,15 @@ class HabitatSceneDataReader():
         return img, show_mask
     
     def visualize_and_save(self, img, show_mask):
-
-        # cv2.imshow("RGB", img)
+        combined = cv2.addWeighted(img.astype("uint8"), 0.5, show_mask[:, :, :3].astype("uint8"), 0.5, 0)
+        cv2.imshow("RGB", combined)
         cv2.imwrite(os.path.join(self.out_dir, "rgb/" , str(self.count).zfill(7) + ".jpg"), img)
-        # cv2.imshow("Semantics", show_mask)
+        cv2.imshow("Semantics", show_mask)
         cv2.imwrite(os.path.join(self.out_dir, "semantics/" , str(self.count).zfill(7) + ".jpg"), show_mask)
+        cv2.imwrite(os.path.join(self.out_dir, "combined_vis/" , str(self.count).zfill(7) + ".jpg"), combined)
+
         
-        cv2.waitKey(1)
+        cv2.waitKey(int(1000/60))
     
     def get_prompt(self):
         return self.initial_coordinates
@@ -163,9 +166,9 @@ def davis_dataset_reader(folder_davis_raw_frames, out_folder, semantic_folder, e
             img, show_mask = dr.get_mask(image)
             dr.visualize_and_save(img, show_mask)
 
-            if os.path.exists(os.path.join(embedding_folder, scene, image + ".pt")):
-                embedding = torch.load(os.path.join(embedding_folder, scene, image + ".pt"))
-                torch.save(embedding, os.path.join(out_folder, scene, "embeddings", image + ".pt"))
+            # if os.path.exists(os.path.join(embedding_folder, scene, image + ".pt")):
+            #     embedding = torch.load(os.path.join(embedding_folder, scene, image + ".pt"))
+            #     torch.save(embedding, os.path.join(out_folder, scene, "embeddings", image + ".pt"))
 
             dr.count+=1
 
@@ -179,10 +182,10 @@ def main():
     Dataset = input("Which dataset do you want to use? (Habitat or Davis) ")
     if Dataset == 'Habitat':
         habitat_dataset_reader(folder_habitat_raw_frames = "/home/nico/semesterproject/data/habitat_raw_frames", 
-                            out_folder = "/home/nico/semesterproject/data/habitat_single_object_tracking")
+                            out_folder = "/home/nico/semesterproject/vis_interim_pres")
     if Dataset == 'Davis':
         davis_dataset_reader(folder_davis_raw_frames = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/JPEGImages/480p/",
-                            out_folder = "/home/nico/semesterproject/data/DAVIS_single_object_tracking_2/",
+                            out_folder = "/home/nico/semesterproject/data/vis_interim_pres/",
                             semantic_folder = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/Annotations_unsupervised/480p/",
                             embedding_folder= "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/ImageEmbeddings/")
 
