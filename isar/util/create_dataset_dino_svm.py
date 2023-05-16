@@ -119,7 +119,10 @@ def main():
     create_dino_dataset = CreateDinoDataset(args.datadir_davis, args.datadir_habitat, args.dino_type)
     create_dino_dataset.create_dataset_all_data()
 
-    with open(f"../../data/dino_features_{args.dino_type}.pkl", "wb") as f:
+    with open(f"../../../data/dino_features_{args.dino_type}.pkl", "wb") as f:
+        pickle.dump(create_dino_dataset.feature_dict, f)
+
+    with open(f"../feature_dict_dinov2/dino_features_{args.dino_type}.pkl", "wb") as f:
         pickle.dump(create_dino_dataset.feature_dict, f)
 
 
