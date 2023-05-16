@@ -377,10 +377,21 @@ class DinoDetector():
 
     def create_svm_dataset(self, img_features: torch.Tensor, mask_flat: np.ndarray, dataset: str, task: str):
         positive_features = img_features[mask_flat, :]
-        all_negative_features_image = img_features[~mask_flat, :] ### TODO: try to use all negative features from the same image
+        all_negative_features_image = img_features[~mask_flat, :]
         negative_indices = torch.randperm(all_negative_features_image.shape[0])[:min(self.n_negative_features_same_image, all_negative_features_image.shape[0])]
         negative_features_image = all_negative_features_image[negative_indices]
-        negative_features = torch.cat([torch.cat(list(v.values())) for k,v in self.negative_sample_dict[dataset].items() if k != task]).to(device=self.device)
+        if dataset == "DAVIS_single_obj":
+            negative_features = torch.cat([torch.cat(list(v.values())) for k,v in self.negative_sample_dict[dataset].items() if k != task]).to(device=self.device)
+        else:
+            negative_features = []
+            for k,v in self.negative_sample_dict[dataset].items():
+                scene_name = k.split("_")[0]+"_"+k.split("_")[1]
+                object_name = k.split("_")[-1]
+                if k.split("_")[2].isdigit():
+                    scene_name = scene_name+"_"+k.split("_")[2]
+                if scene_name not in task and object_name not in task:
+                    negative_features.append(torch.cat(list(v.values())))
+            negative_features = torch.cat(negative_features).to(device=self.device)
 
         all_negative_features = torch.cat((negative_features, negative_features_image))
         negative_labels = torch.zeros(all_negative_features.shape[0])
@@ -498,7 +509,7 @@ class DinoDetector():
         mask = cv2.resize(mask.astype("float32"), (256, 256)) > 0.5
 
         mask_refined, iou_prediction, logits = self.sam_predictor.predict(
-                    mask_input=np.expand_dims(mask * 20 - 10, axis=0),
+                    # mask_input=np.expand_dims(mask * 20 - 10, axis=0),
                     point_coords=prompt_points,
                     point_labels=prompt_labels.T.squeeze(),
                     multimask_output=False,
@@ -510,7 +521,7 @@ class DinoDetector():
     def get_sam_prompts(self, svm_predictions, mask):
         neighborhood_size = 10
         n_maxima = 10
-        n_negative_points = 1000
+        n_negative_points = 0
 
         data_max = maximum_filter(svm_predictions, size=neighborhood_size)
         maxima = (svm_predictions == data_max)
