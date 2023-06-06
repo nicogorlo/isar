@@ -54,7 +54,7 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)][-1:]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
             task_stats = self.run_task_single_object(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
@@ -64,7 +64,7 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)][-1:]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
             task_stats = self.run_task_single_object(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
@@ -91,7 +91,7 @@ class Benchmark():
                     prompt_dict = json.load(f)
                 prompts[scene] = prompt_dict
             else:
-                with open(os.path.join(train_dir, scene, 'prompts.json'), 'r') as f:
+                with open(os.path.join(train_dir, scene, 'prompts_multi.json'), 'r') as f:
                     prompt_dict = json.load(f)
                 prompts[scene] = prompt_dict
         
@@ -106,8 +106,8 @@ class Benchmark():
         
         for scene in test_scenes:
             image_dir = os.path.join(test_dir, scene, "color/")
-            eval_dir = os.path.join(test_dir, scene, "semantic/")
-            eval = Evaluation(eval_dir)
+            eval_dir = os.path.join(test_dir, scene, "semantic_raw/")
+            eval = Evaluation(eval_dir, info)
             ious = {}
             self.detector.on_new_test_sequence()
             for image_name in sorted(os.listdir(image_dir)):
@@ -119,7 +119,8 @@ class Benchmark():
 
                 seg = self.detector.test(img, image_name, emb)
 
-                # eval.compute_evaluation_metrics(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image_name), image_name)
+                cv2.waitKey(1)
+                eval.compute_evaluation_metrics(seg, image_name)
             scene_stats = eval.report_results(scene)
             task_stats.update(scene_stats)
         return task_stats
@@ -130,8 +131,8 @@ def main(outdir, datadir_single_object, datadir_multi_object, device):
     bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run_dataset('multi_object', 'multi_shot')
-    # bm.run()
+    # bm.run_dataset('multi_object', 'multi_shot')
+    bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_dino_sam_refinement.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:

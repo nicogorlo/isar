@@ -7,21 +7,40 @@ import os
 
 
 class Evaluation():
-    def __init__(self, eval_dir) -> None:
+    def __init__(self, eval_dir, info = None) -> None:
         self.eval_dir = eval_dir
 
         self.ious = {}
         self.bound_f_measures = {}
 
-        self.mIoU = 0
-        self.mBoundF = 0
+        self.mIoU = {}
+        self.mBoundF = {}
 
-        self.misclassifications = 0
-        self.false_detection_visible = 0
-        self.total_frames_visible = 0
+        self.misclassifications = {}
+        self.false_detection_visible = {}
+        self.total_frames_visible = {}
 
-        self.false_detection_not_visible = 0
-        self.total_frames_not_visible = 0
+        self.false_detection_not_visible = {}
+        self.total_frames_not_visible = {}
+
+        if info is not None:
+            self.info = info
+            self.semantic_ids = info['semantic_ids']
+            self.color_map = info['color_map']
+
+            for id in self.semantic_ids:
+                self.ious[id] = {}
+                self.bound_f_measures[id] = {}
+                self.misclassifications[id] = 0
+                self.false_detection_visible[id] = 0
+                self.total_frames_visible[id] = 0
+                self.false_detection_not_visible[id] = 0
+                self.total_frames_not_visible[id] = 0
+                self.mIoU[id] = 0
+                self.mBoundF[id] = 0
+
+        else:
+            raise Exception("No info.json file found in {}".format(eval_dir.split('/')[-4]))
 
     def compute_IoU(self, seg1, seg2):
         "computes the Jaccard index (intersection over Union) of two binary masks"
@@ -41,49 +60,36 @@ class Evaluation():
 
     
     def get_gt_mask(self, image_name):
-        if os.path.exists(os.path.join(self.eval_dir, image_name)):
-            gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name))
-        elif os.path.exists(os.path.join(self.eval_dir, image_name.replace('jpg', 'png'))):
-            gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name.replace('jpg', 'png')))
+        if os.path.exists(os.path.join(self.eval_dir, image_name.replace("jpg", "npy"))):
+            gt_mask = np.load(os.path.join(self.eval_dir, image_name.replace("jpg", "npy")))
         else:
             raise Exception("No ground truth mask found for image {}".format(image_name))
-        gt_mask = cv2.cvtColor(gt_mask, cv2.COLOR_BGR2GRAY)
-        if gt_mask.sum() > 1.0:
-            gt_mask = cv2.GaussianBlur(gt_mask, (21, 21), 0)
-            gt_mask = (gt_mask > gt_mask.max()/2)
-        else: 
-            gt_mask = (gt_mask >= 0.5)
-        return gt_mask.astype("uint8")
+        return gt_mask
 
 
-    #################################################
-    ###########  Evaluation Metric Ideas  ###########
-    #################################################
-
-
-    def misclassification_counter(self, IoU_score):
+    def misclassification_counter(self, id, IoU_score):
         if IoU_score < 0.4:
-            self.misclassifications += 1
+            self.misclassifications[id] += 1
             print("IoU < 0.4")
 
 
-    def false_detection_rate_visible_counter(self, mask, gt_mask, IoU_score):
+    def false_detection_rate_visible_counter(self, id, mask, gt_mask, IoU_score):
         if IoU_score < 0.1 and np.sum(mask) > np.sum(gt_mask) * IoU_score and np.sum(gt_mask) > 0:
-            self.false_detection_visible += 1
+            self.false_detection_visible[id] += 1
             # print("object lost")
 
     
-    def false_detection_rate_not_visible_counter(self, mask, gt_mask):
+    def false_detection_rate_not_visible_counter(self, id, mask, gt_mask):
         if np.sum(gt_mask) == 0 and np.sum(mask) > 0:
-            self.false_detection_not_visible += 1
+            self.false_detection_not_visible[id] += 1
             # print("object lost")
 
-    def object_visible_gt_counter(self, gt_mask):
+    def object_visible_gt_counter(self, id, gt_mask):
         if np.sum(gt_mask) == 0:
-            self.total_frames_not_visible += 1
+            self.total_frames_not_visible[id] += 1
             # print("object not visible")
         else:
-            self.total_frames_visible += 1
+            self.total_frames_visible[id] += 1
             # print("object visible")
     
 
@@ -99,42 +105,72 @@ class Evaluation():
         return contour_image
 
     def compute_boundary_f_measure(self, predicted_mask, gt_mask):
-        # Find contours
         predicted_contours = self.find_contours(predicted_mask)
         gt_contours = self.find_contours(gt_mask)
         
-        # Flatten and binarize
         predicted_contours = (predicted_contours.flatten() > 0).astype(int)
         gt_contours = (gt_contours.flatten() > 0).astype(int)
         
-        # Calculate precision, recall, and F-measure TODO: compute separately to take care of zero case.
+        # Calculate precision, recall, and F-measure. TODO: compute separately to take care of zero case.
         precision, recall, f_measure, _ = precision_recall_fscore_support(gt_contours, predicted_contours, average='binary', zero_division=1)
         
         return precision, recall, f_measure
         
 
-    def compute_evaluation_metrics(self, mask, gt_mask, image_name):
-        iou = self.compute_IoU(mask, gt_mask)
-        prec, rec, boundary_f_measure = self.compute_boundary_f_measure(mask.astype("uint8"), gt_mask)
-        self.ious[image_name] = iou
-        self.bound_f_measures[image_name] = boundary_f_measure
-        self.misclassification_counter(iou)
-        self.false_detection_rate_visible_counter(mask, gt_mask, iou)
-        self.false_detection_rate_not_visible_counter(mask, gt_mask)
-        self.object_visible_gt_counter(gt_mask)
+    def compute_evaluation_metrics(self, mask, image_name):
+        gt_mask = self.get_gt_mask(image_name)
+        for id in self.semantic_ids:
+            color = np.array(self.color_map[str(id)])
+
+            mask_bin = np.all(mask==color, axis=-1)
+            gt_mask_bin = (gt_mask == id)
+
+            if gt_mask_bin.sum() > 0 and mask_bin.sum() > 0:
+                iou = self.compute_IoU(mask_bin, gt_mask_bin)
+                prec, rec, boundary_f_measure = self.compute_boundary_f_measure(mask_bin.astype("uint8"), gt_mask_bin.astype("uint8"))
+                self.ious[id][image_name] = iou
+                self.bound_f_measures[id][image_name] = boundary_f_measure
+                self.misclassification_counter(id, iou)
+                self.false_detection_rate_visible_counter(id, mask_bin, gt_mask_bin, iou)
+            self.false_detection_rate_not_visible_counter(id, mask_bin, gt_mask_bin)
+            self.object_visible_gt_counter(id, gt_mask_bin)
 
     def report_results(self, scene_name):
-        self.mIoU = np.mean(list(self.ious.values()))
-        self.mBoundF = np.mean(list(self.bound_f_measures.values()))
-        false_detection_rate_visible = self.false_detection_visible / self.total_frames_visible
-        if self.total_frames_not_visible == 0:
-            false_detection_rate_not_visible = None
-        else:
-            false_detection_rate_not_visible = self.false_detection_not_visible / self.total_frames_not_visible
-        print("scene mIoU: {}".format(self.mIoU))
-        print("scene boundary f measure: {}".format(self.mBoundF))
-        print("misclassification rate: {}".format(self.misclassifications/len(self.ious)))
+        false_detection_rate_visible = {}
+        false_detection_rate_not_visible = {}
+        misclassification_rate = {}
+        for id in self.semantic_ids:
+            self.mIoU[id] = np.mean(list(self.ious[id].values()))
+            self.mBoundF[id] = np.mean(list(self.bound_f_measures[id].values()))
+            if self.total_frames_visible[id] == 0:
+                false_detection_rate_visible[id] = None
+            else:
+                false_detection_rate_visible[id] = self.false_detection_visible[id] / self.total_frames_visible[id]
+            if self.total_frames_not_visible[id] == 0:
+                false_detection_rate_not_visible[id] = None
+            else:
+                false_detection_rate_not_visible[id] = self.false_detection_not_visible[id] / self.total_frames_not_visible[id]
+            
+            misclassification_rate[id] = self.misclassifications[id]/len(self.ious[id])
+
+        scene_miou = np.mean(list(self.mIoU.values()))
+        scene_mboundf = np.mean(list(self.mBoundF.values()))
+        scene_misclassification_rate = np.mean(list(misclassification_rate.values()))
+
+        print("scene mIoU: {}".format(scene_miou))
+        print("scene boundary f measure: {}".format(scene_mboundf))
+        print("scene misclassification rate: {}".format(scene_misclassification_rate))
         print("false detection ratio visible: {}".format(false_detection_rate_visible))
         print("false detection ratio not visible: {}".format(false_detection_rate_not_visible))
 
-        return {scene_name: {'mIoU': self.mIoU, 'mBoundF': self.mBoundF, 'misclassification_rate': self.misclassifications/len(self.ious), 'false_detection_ratio_visible': false_detection_rate_visible, 'false_detection_ratio_not_visible': false_detection_rate_not_visible}}
+        return {
+                scene_name: 
+                    {
+                    'mIoU': scene_miou, 
+                    'mBoundF': scene_mboundf, 
+                    'misclassification_rate': scene_misclassification_rate, 
+                    'false_detection_ratio_visible': false_detection_rate_visible, 
+                    'false_detection_ratio_not_visible': false_detection_rate_not_visible,
+                    'iou_detailed': self.ious
+                    }
+                    }

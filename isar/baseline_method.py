@@ -7,19 +7,22 @@ import json
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from scipy.ndimage import maximum_filter, generate_binary_structure, iterate_structure, binary_erosion
+from scipy.optimize import linear_sum_assignment
 
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
 import torch.optim as optim
 
-from params import OUTDIR
-from util.isar_utils import performance_measure, semantic_obs_to_img, generate_pastel_color
 from segment_anything import SamPredictor, sam_model_registry
 from detector import GenericDetector
 
+from params import OUTDIR
+from util.isar_utils import performance_measure, semantic_obs_to_img, generate_pastel_color
+from sam_mask_generator import SingleCropMaskGenerator
+
 class BaselineMethod(GenericDetector):
-    def __init__(self, device, sam_model_type = 'vit_h', dino_model_type = 'dinov2_vitl14', use_precomputed_sam_embeddings = False, outdir = OUTDIR, *args, **kwargs):
+    def __init__(self, device: str, sam_model_type: str = 'vit_h', dino_model_type: str = 'dinov2_vitl14', use_precomputed_sam_embeddings: bool = False, outdir: str = OUTDIR, *args, **kwargs):
 
         #configurable parameters:
         self.start_reid = False
@@ -54,13 +57,11 @@ class BaselineMethod(GenericDetector):
 
         if self.use_conv:
             self.svm_conv = nn.Conv1d(self.dino_model.num_features, 1, kernel_size=1, stride=1, padding=0, device='cuda')
-            self.optimizer = optim.Adam(self.svm_conv.parameters(), lr=0.1)
         else:
             self.svm = nn.Linear(self.dino_model.num_features, 1).to(device='cuda')
-            self.optimizer = optim.Adam(self.svm.parameters(), lr=0.1)
 
         self.svms = {}
-        self.n_negative_features_same_image = 3200
+        self.n_negative_features_same_image = 512*512
 
         with open(f"feature_dict_dinov2/dino_features_{dino_model_type}.pkl", "rb") as f:
             self.negative_sample_dict = pickle.load(f)
@@ -69,7 +70,7 @@ class BaselineMethod(GenericDetector):
 
         self.color_map = {}
 
-    def on_new_task(self, info):
+    def on_new_task(self, info: dict):
         super().on_new_task()
 
         self.info = info
@@ -79,10 +80,10 @@ class BaselineMethod(GenericDetector):
     
     def train(
             self,
-            train_dir,
-            train_scenes,
-            semantic_ids,
-            prompts
+            train_dir: str,
+            train_scenes: list,
+            semantic_ids: list,
+            prompts: dict
             ):
         prompts_rearranged: dict = {}
         for scene in train_scenes:
@@ -100,6 +101,7 @@ class BaselineMethod(GenericDetector):
         #### TODO: create SVM for each semantic class: ####
         ###################################################
         
+        positive_samples = {}
         for semantic_id in semantic_ids:
             prompts_class = prompts_rearranged[semantic_id]
             imgs = []
@@ -121,6 +123,11 @@ class BaselineMethod(GenericDetector):
                 # 1. predict mask with sam_predictor
                 mask = self.initial_sam_prediction(0, 0, img_square, img, embeddings_sam[idx], None, list(prompts_class.values())[idx]) 
 
+                cv2.imshow("seg", 
+                           cv2.resize(cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask).astype("uint8"), 0.7, 0), (img.shape[1],img.shape[0])))
+                cv2.waitKey(1)
+                
+                # cv2.waitKey(100)
                 # 2. preprocess image dino
                 tensor_in = self.preprocess_image_dino(img)
 
@@ -132,7 +139,7 @@ class BaselineMethod(GenericDetector):
             img_features = torch.cat(img_features_list, dim=0)
             mask_flat = np.concatenate(flat_masks_list, axis=0)
 
-            task = train_dir.split("/")[-2]
+            task = train_dir.split("/")[-3]
             tensor_dataset, weights = self.create_svm_dataset(img_features, mask_flat, "Habitat_single_obj", task)            
             num_samples = len(tensor_dataset)
             sampler = torch.utils.data.WeightedRandomSampler(weights, num_samples, replacement=True)
@@ -143,13 +150,11 @@ class BaselineMethod(GenericDetector):
                 svm_conv, loss_list = self.train_svm_conv(svm_conv, dataloader)
                 self.svms[semantic_id] = svm_conv
                 self.margins[semantic_id] = 2.0 / np.linalg.norm(svm_conv.weight.detach().cpu().numpy())
-
             else:
                 svm = nn.Linear(self.dino_model.num_features, 1).to(device='cuda')
                 svm, loss_list = self.train_svm(svm, dataloader)
                 self.svms[semantic_id] = svm
                 self.margins[semantic_id] = 2.0 / np.linalg.norm(svm.weight.detach().cpu().numpy())
-
 
             del tensor_in, tensor_dataset, sampler, dataloader
             torch.cuda.empty_cache()
@@ -157,25 +162,30 @@ class BaselineMethod(GenericDetector):
         
         return
 
-    def test(self, img, image_name, embedding):
+    def test(self, img: np.ndarray, image_name: str, embedding: str):
         show_mask = None
 
         if self.start_reid:
             tensor = self.preprocess_image_dino(img).cuda()
             img_features = self.extract_features_dino(self.dino_model, tensor).cuda()
-            img_square = cv2.resize(img, (self.upsampled_w, self.upsampled_h))
-            self.set_sam_img_embedding(img_square, embedding)
             del tensor
             torch.cuda.empty_cache()
+
+            img_square = cv2.resize(img, (self.upsampled_w, self.upsampled_h))
+            self.set_sam_img_embedding(img_square, embedding)
 
             mask_info = {}
 
             for semantic_id in sorted(list(self.svms.keys())):
-                out, svm_predictions = self.predict_svm(img_features, img_square, img, semantic_id)
-                svm_predictions = svm_predictions
-                mask_info[semantic_id] = (out, svm_predictions / self.margins[semantic_id])
+                out, svm_predictions = self.predict_svm(img_features, img, semantic_id)
+                mask_info[semantic_id] = (out, svm_predictions)# / self.margins[semantic_id])
 
-            combined_mask = self.combine_masks(mask_info)
+            combined_mask = self.predict_multi(img_features, img_square)
+            # cv2.imshow("mask_comb1100", cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask_info[1100][0]).astype("uint8"), 0.7, 0.0))
+            # cv2.waitKey(1)
+            # cv2.imshow("mask_comb1103", cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask_info[1103][0], color = np.array([0, 255, 0])).astype("uint8"), 0.7, 0.0))
+            # cv2.waitKey(1)
+            # combined_mask = self.combine_masks(mask_info)
 
             combined_mask_rgb = np.zeros((self.upsampled_h, self.upsampled_w, 3))
             for semantic_id in sorted(list(self.svms.keys())): 
@@ -196,9 +206,9 @@ class BaselineMethod(GenericDetector):
             del img_features, svm_predictions, out
             torch.cuda.empty_cache()
 
-        return show_mask
+        return combined_mask_rgb
     
-    def predict_svm(self, img_features, img_square, img, semantic_id):
+    def predict_svm(self, img_features: torch.Tensor, img: np.ndarray, semantic_id: int):
         if self.use_conv:
             svm_predictions = self.svms[semantic_id](img_features.unsqueeze(-1)).detach().cpu().numpy()
         else: 
@@ -211,12 +221,78 @@ class BaselineMethod(GenericDetector):
         disconnected_masks = self.one_hot_encode_binary_mask(out)
         if disconnected_masks:
             filtered_mask = np.logical_or.reduce(disconnected_masks)
-            out = self.sam_refinement(filtered_mask, svm_predictions.reshape((self.upsampled_h, self.upsampled_w)))
+            out = self.sam_refinement(img, filtered_mask, svm_predictions.reshape((self.upsampled_h, self.upsampled_w)))
         else:
             out = np.zeros_like(out, bool)
 
         return out, svm_predictions.reshape((self.upsampled_h, self.upsampled_w))
 
+    def predict_multi(self, img_features, img_square):
+
+        def calculate_reward(prediction_array, mask):
+            return (prediction_array * mask).sum() #/ mask.sum()
+        
+        def create_reward_matrix(predictions_dict, masks):
+            reward_matrix = []
+            for semantic_id, prediction_array in predictions_dict.items():
+                reward_row = []
+                for mask in masks:
+                    reward_row.append(calculate_reward(prediction_array, mask))
+                reward_matrix.append(reward_row)
+                # print(semantic_id, "|", reward_row)
+                # print("----------------------------------------")
+            return reward_matrix
+        
+        def assign_masks(predictions_dict, masks):
+            reward_matrix = create_reward_matrix(predictions_dict, masks)
+            row_ind, col_ind = linear_sum_assignment(reward_matrix, maximize = True)
+            return ({list(predictions_dict.keys())[i]: masks[j] for i, j in zip(row_ind, col_ind)},
+                    {list(predictions_dict.keys())[i]: reward_matrix[i][j] for i, j in zip(row_ind, col_ind)})
+
+        svm_predictions = {}
+        out = {}
+        for semantic_id in sorted(list(self.svms.keys())):
+            if self.use_conv:
+                svm_predictions[semantic_id] = self.svms[semantic_id](img_features.unsqueeze(-1)).detach().cpu().numpy()
+            else: 
+                svm_predictions[semantic_id] = self.svms[semantic_id](img_features).detach().cpu().numpy()
+
+            out[semantic_id] = (svm_predictions[semantic_id] > self.margins[semantic_id]/2).reshape((self.upsampled_h, self.upsampled_w))
+            svm_predictions[semantic_id] = svm_predictions[semantic_id].reshape((self.upsampled_h, self.upsampled_w))
+
+            disconnected_masks = self.one_hot_encode_binary_mask(out[semantic_id])
+            if disconnected_masks:
+                out[semantic_id] = np.logical_or.reduce(disconnected_masks)
+            else:
+                out[semantic_id] = np.zeros_like(out[semantic_id], bool)
+
+        prompt_points = []
+        prompt_labels = []
+        for semantic_id, svm_prediction in svm_predictions.items():
+            prompt_point_id, _ = self.get_sam_prompts(svm_prediction.reshape((self.upsampled_h, self.upsampled_w)), out[semantic_id])
+            prompt_points.append(prompt_point_id)
+
+        prompt_points = np.concatenate(prompt_points, axis = 0).astype(np.float64)
+
+        prompt_points[:,0] /= self.upsampled_w
+        prompt_points[:, 1] /= self.upsampled_h
+
+        mask_generator = SingleCropMaskGenerator(self.sam_predictor, points_per_side = None, point_grids=[prompt_points])
+        mask_data = mask_generator.generate(img_square)
+
+        masks = [mask["segmentation"] for mask in mask_data]
+
+        combined_mask = np.zeros((self.upsampled_h, self.upsampled_w), dtype=np.int)
+
+        assigned_masks, avg_preds = assign_masks(svm_predictions, masks)
+
+        # current problem: Different numbers of train samples makes the svm predictions not comparable
+        for semantic_id, pred in sorted(avg_preds.items(), key = lambda x: x[1]):
+            if out[semantic_id].sum() == 0 or svm_predictions[semantic_id][assigned_masks[semantic_id]].sum() < 0.0:
+                continue
+            combined_mask[assigned_masks[semantic_id]] = semantic_id
+
+        return combined_mask
 
     def combine_masks(self, mask_dict):
         mask_shape = list(next(iter(mask_dict.values()))[0].shape)
@@ -226,15 +302,20 @@ class BaselineMethod(GenericDetector):
 
         combined_mask = np.zeros(mask_shape, dtype=np.int)
 
+        max_mask = np.zeros(mask_shape)
         for idx, (semantic_id, (mask, logits)) in enumerate(mask_dict.items()):
-            logits_array[mask, idx] = logits[mask]
+            index = idx + 1
+            logits_array[mask, index-1] = logits[mask]
 
-            max_mask = logits_array.argmax(axis=-1)
-            combined_mask[mask] = semantic_id * (max_mask == idx)[mask]
+            max_mask[mask] = logits_array[mask,:].argmax(axis=-1) + 1
         
+        for idx, semantic_id in enumerate(mask_dict.keys()):
+            index = idx + 1
+            combined_mask[max_mask == index] = semantic_id
+
         return combined_mask
 
-    def load_dino_v2_model(self, dino_model_type):
+    def load_dino_v2_model(self, dino_model_type: str):
         model = torch.hub.load('facebookresearch/dinov2', dino_model_type)
         if torch.cuda.is_available():
             model = model.cuda()
@@ -254,8 +335,7 @@ class BaselineMethod(GenericDetector):
     
     def extract_features_dino(self, model, input_tensor):
         with torch.no_grad():
-            features_dict = model.forward_features(input_tensor)
-            features = features_dict['x_norm_patchtokens'].squeeze()
+            features = model.forward_features(input_tensor)['x_norm_patchtokens'].squeeze()
             # features = features.reshape(patch_h, patch_w, feat_dim)
             if self.upsampled_feature_vectors:
                 features = features.reshape(self.patch_w, self.patch_h, -1).to(device=self.device)
@@ -293,9 +373,9 @@ class BaselineMethod(GenericDetector):
             x = int(point_prompt[0] * self.upsampled_h / img.shape[1])
             y = int(point_prompt[1] * self.upsampled_w / img.shape[0])
             bbox_prompt = np.array([
-                int(bbox_prompt[0] * self.upsampled_h / img.shape[1]), 
-                int(bbox_prompt[1] * self.upsampled_w / img.shape[0]), 
-                int(bbox_prompt[2] * self.upsampled_h / img.shape[1]), 
+                int(bbox_prompt[0] * self.upsampled_h / img.shape[1]),
+                int(bbox_prompt[1] * self.upsampled_w / img.shape[0]),
+                int(bbox_prompt[2] * self.upsampled_h / img.shape[1]),
                 int(bbox_prompt[3] * self.upsampled_w / img.shape[0])])
             mask, iou_prediction, _ = self.sam_predictor.predict(
                 point_coords=np.array([[x,y]]),
@@ -373,6 +453,7 @@ class BaselineMethod(GenericDetector):
             negative_features = torch.cat(negative_features).to(device=self.device)
 
         all_negative_features = torch.cat((negative_features, negative_features_image))
+        # all_negative_features = negative_features_image
         negative_labels = torch.zeros(all_negative_features.shape[0])
         positive_labels = torch.ones(positive_features.shape[0])
 
@@ -396,10 +477,10 @@ class BaselineMethod(GenericDetector):
     def train_svm(self, svm, dataloader):
         optimizer = optim.Adam(svm.parameters(), lr=0.1)
         loss_list = []
-        for epoch in range(4):
+        for epoch in range(11):
             print("Epoch: ", epoch)
             loss_list_ep = []
-            if epoch >= 8:
+            if epoch >= 6:
                 optimizer.param_groups[0]['lr'] = 0.01
             for batch, target in tqdm(dataloader):
                 optimizer.zero_grad()
@@ -435,7 +516,7 @@ class BaselineMethod(GenericDetector):
         
         return svm_conv, loss_list
     
-    def show_mask(self, mask: np.ndarray, color = None):
+    def show_mask(self, mask: np.ndarray, color: np.ndarray = None):
         if color is not None:
             color = color
         else:
@@ -484,7 +565,7 @@ class BaselineMethod(GenericDetector):
         
         cv2.imshow("SVM Dist", cv2.addWeighted(img, 0.2, (svm_dist*255).astype("uint8"), 0.8, 0.0))
     
-    def sam_refinement(self, mask, svm_predictions):
+    def sam_refinement(self, img, mask, svm_predictions):
 
         prompt_points, prompt_labels = self.get_sam_prompts(svm_predictions, mask)
         #could also sample positive points from the mask and negative from outside the mask
@@ -503,14 +584,14 @@ class BaselineMethod(GenericDetector):
     def one_hot_encode_binary_mask(self, mask):
         num_labels, labeled_mask, stats, centroid = cv2.connectedComponentsWithStats(mask.astype(np.uint8))
         total_area = np.sum((mask > 0))
-        masks_ = [(labeled_mask == i) for i in np.unique(labeled_mask) if i != 0 and np.sum((labeled_mask == i)) > total_area * 0.1]
+        masks_ = [(labeled_mask == i) for i in np.unique(labeled_mask) if i != 0 and np.sum((labeled_mask == i)) > total_area * 0.2]
 
         return masks_
     
-    def get_sam_prompts(self, svm_predictions, mask): ###### TODO: WRONG MAXIMA
-        neighborhood_size = 5
-        n_maxima = 8
-        n_negative_points = 0
+    def get_sam_prompts(self, svm_predictions, mask, neighborhood_size=5, n_maxima=8, n_negative_points=0):
+        neighborhood_size = neighborhood_size
+        n_maxima = n_maxima
+        n_negative_points = n_negative_points
 
         data_max = maximum_filter(svm_predictions, size=neighborhood_size)
         maxima = (svm_predictions == data_max)
