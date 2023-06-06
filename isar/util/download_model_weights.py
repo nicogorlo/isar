@@ -1,21 +1,12 @@
 import gdown
+import requests
+import os
 
-gdown.download('https://drive.google.com/uc?id=1qKhp_6-PQOk7ONhOScObDG1VCHCpSpVl&export=download',
-    '../modelzoo/u2net.pth',
-    quiet=False)
+if not os.path.exists('../modelzoo'):
+    os.makedirs('../modelzoo')
 
-gdown.download('https://drive.google.com/uc?id=1HS_rLIN3JBJZaN2CWPFM43xpnDwqSC_U&export=download',
-    '../modelzoo/dino_resnet50_pretrain.pth',
-    quiet=False)
+if not os.path.exists('../feature_dict_dinov2'):
+    os.makedirs('../feature_dict_dinov2')
 
-gdown.download('https://drive.google.com/uc?id=1ePMF73_mJpkTjspaGeB6DoAvLTVzEGR4&export=download',
-    '../ow_detr_cpts/checkpoint0159.pth',
-    quiet=False)
-
-gdown.download('https://drive.google.com/uc?id=1wGnKVU7QebJnHzzI7SBKFpQmhxnPqMt4&export=download',
-    '../ow_detr_cpts/checkpoint0104.pth',
-    quiet=False)
-
-gdown.download('https://drive.google.com/uc?id=12tygFzGxYiuGxWX4HpKhY2lT2HaMvk3S&export=download',
-    '../ow_detr_cpts/checkpoint0099.pth',
-    quiet=False)
+r = requests.get('https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth', allow_redirects=True)
+open('../modelzoo/sam_vit_h_4b8939.pth', 'wb').write(r.content)
