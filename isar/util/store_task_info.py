@@ -16,15 +16,16 @@ def generate_color_palette(num_colors):
 
 
 if __name__ == "__main__":
-    datadir = "/home/nico/semesterproject/data/re-id_benchmark_ycb/multi_object"
+    datadir = "/home/nico/semesterproject/data/re-id_benchmark_ycb/single_object/"
     info = {}
     prompts = {}
 
-    for task in sorted(os.listdir(datadir)):
+    for task in [i for i in sorted(os.listdir(datadir)) if i == "cheezit"]:
         color_map = {}
-        for file in Path(os.path.join(datadir, task)).rglob('prompts.json'):
+        prompts = {}
+        for file in Path(os.path.join(datadir, task)).rglob('prompts_multi.json'):
             with file.open() as f:
-                prompts = json.load(f)
+                prompts.update(json.load(f))
 
         for file in Path(os.path.join(datadir, task)).rglob('color_map.json'):
             with file.open() as f:
@@ -36,15 +37,15 @@ if __name__ == "__main__":
             for i, label in enumerate(labels):
                 color_map.update({str(label): semantic_palette[i%len(semantic_palette)]})
 
-        info = {"object_name": task, 
+        info = {"task_name": task, 
                 "semantic_ids": [int(i) for i in np.unique([int(item) for sublist in [list(p.keys()) for p in prompts.values()] for item in sublist])],
-                "num_prompts": len(prompts),
+                "num_prompts_multi": len(prompts),
                 "color_map": color_map}
         print(info)
 
         with open(os.path.join(datadir, task, "info.json"), "w") as f:
             json.dump(info, f)
 
-        # for scene in sorted(os.listdir(os.path.join(datadir, task, "train"))):
-        #     with open(os.path.join(datadir, task, "train", scene, "color_map.json"), "w") as f:
-        #         json.dump(color_map, f)
+        for scene in sorted(os.listdir(os.path.join(datadir, task, "test"))):
+            with open(os.path.join(datadir, task, "test", scene, "color_map.json"), "w") as f:
+                json.dump(color_map, f)

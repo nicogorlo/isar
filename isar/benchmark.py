@@ -6,14 +6,8 @@ from pathlib import Path
 from datetime import datetime
 import argparse
 
-from detector import Detector
-from sam_detector import SAMDetector
-from dino_detector import DinoDetector
-from reidentification import Reidentification
 from evaluation import Evaluation
-from util.isar_utils import get_image_it_from_folder
 
-from params import FeatureModes
 from baseline_method import BaselineMethod
 
 class Benchmark():

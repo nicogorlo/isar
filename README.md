@@ -22,14 +22,14 @@ Legacy versions of the method work on [OW-DETR][ow_detr_link]  (which builds on
 [ycb_link]: https://www.ycbbenchmarks.com/
 
 When using the dataset in your research, please also cite: [//]: #add citations
-* Habitat-sim
-* Replica-Dataset
-* HM3D-Dataset
-* ycb-object-and-model-set
+* [AI-Habitat Simulator][habitat_link]
+* [Replica-Dataset][Replica_link]
+* [habitat-matterport-3D-dataset][hm3d_link]
+* [ycb-object-and-model-set][ycb_link]
 
 
 ## Folder structure:
-the datasets are structured as follows: [//]: #change to new benchmark dataset
+the datasets are structured as follows:
 
 Dataset_name <br>
 |--single_object/multi_object <br>

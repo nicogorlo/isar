@@ -18,12 +18,12 @@ from torchvision.ops.boxes import batched_nms, box_area  # type: ignore
 class SingleCropMaskGenerator(SamAutomaticMaskGenerator):
 
     # Default values are taken from the SamAutomaticMaskGenerator
-    def __init__(self, predictor: SamPredictor, points_per_side = 32) -> None:
+    def __init__(self, predictor: SamPredictor, points_per_side = 32, point_grids = None) -> None:
         super().__init__(predictor.model, points_per_side = points_per_side, points_per_batch = 64, pred_iou_thresh = 0.88, 
                          stability_score_thresh = 0.95, stability_score_offset = 1.0, 
                          box_nms_thresh = 0.7, crop_n_layers= 0, crop_nms_thresh = 0.7, 
                          crop_overlap_ratio= 512 / 1500, crop_n_points_downscale_factor = 1, 
-                         point_grids = None, min_mask_region_area = 1000, output_mode = "binary_mask")
+                         point_grids = point_grids, min_mask_region_area = 500, output_mode = "binary_mask")
         
         self.crop_n_layers = 0
         self.predictor = predictor
