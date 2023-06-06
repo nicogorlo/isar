@@ -17,12 +17,11 @@ import torch.optim as optim
 from segment_anything import SamPredictor, sam_model_registry
 from detector import GenericDetector
 
-from params import OUTDIR
 from util.isar_utils import performance_measure, semantic_obs_to_img, generate_pastel_color
 from sam_mask_generator import SingleCropMaskGenerator
 
 class BaselineMethod(GenericDetector):
-    def __init__(self, device: str, sam_model_type: str = 'vit_h', dino_model_type: str = 'dinov2_vitl14', use_precomputed_sam_embeddings: bool = False, outdir: str = OUTDIR, *args, **kwargs):
+    def __init__(self, device: str, sam_model_type: str = 'vit_h', dino_model_type: str = 'dinov2_vitl14', use_precomputed_sam_embeddings: bool = False, outdir: str = '', *args, **kwargs):
 
         #configurable parameters:
         self.start_reid = False

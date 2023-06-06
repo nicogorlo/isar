@@ -21,7 +21,7 @@ Legacy versions of the method work on [OW-DETR][ow_detr_link]  (which builds on
 [hm3d_link]: https://github.com/facebookresearch/habitat-matterport3d-dataset
 [ycb_link]: https://www.ycbbenchmarks.com/
 
-When using the dataset in your research, please also cite: [//]: #add citations
+When using the dataset in your research, please also cite:
 * [AI-Habitat Simulator][habitat_link]
 * [Replica-Dataset][Replica_link]
 * [habitat-matterport-3D-dataset][hm3d_link]
