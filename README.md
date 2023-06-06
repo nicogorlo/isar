@@ -60,10 +60,10 @@ Dataset_name <br>
 --------|--(optional:depth) <br>
 -----------|--xxxxxxx.png <br>
 -----------|-- ... <br>
---------|--semantics (this is used for visualization) <br>
+--------|--semantic (this is used for visualization) <br>
 -----------|--xxxxxxx.png <br>
 -----------|-- ... <br>
---------|--semantics_raw (this is used for eval) <br>
+--------|--semantic_raw (this is used for eval) <br>
 -----------|--xxxxxxx.npy <br>
 -----------|-- ... <br>
 ------|-- ... <br>
