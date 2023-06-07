@@ -15,11 +15,13 @@ class GenericDetector():
     def __init__(self, *args, **kwargs):
         self.device = kwargs.get("device", "cpu")
 
-    def train_single_shot(self, train_data, annotations):
+    def train(self, train_dir: str, train_scenes: list, semantic_ids: list, prompts: dict) -> None:
         """
-        train a single shot detector
-        train data: single image
-        annotations: one bounding box and point prompt per object class 
+        train a method
+        train_dir: path to train data
+        train_scenes: list of scene names
+        semantic_ids: list of semantic ids to track
+        prompts: dict of prompts for each scene
             structure:
                 {
                     image_name: {f"{instance_class}": 
@@ -32,33 +34,25 @@ class GenericDetector():
         
         return
     
-    def train_multi_shot(self, train_data, annotations):
-        """
-        train a single shot detector
-        train data: sequence of images
-        annotations: a few bounding boxes and point prompts per object class 
-        """
-        print("training for multi shot detection")
-        return
-    
-    def on_new_task(self, *args, **kwargs):
+    def on_new_task(self, info: dict, *args, **kwargs) -> None:
         """
         reset detector for new task (new train sequences)
+        info is the info.json file for the task
         """
         print("new task")
         return
 
     
-    def on_new_test_sequence(self, *args, **kwargs):
+    def on_new_test_sequence(self, *args, **kwargs) -> None:
         """
         reset detector for new test sequence
         """
         print("new test sequence")
         return
     
-    def inference(self, img: np.ndarray, image_name: str):
+    def test(self, img: np.ndarray, image_name: str) -> np.ndarray:
         """
-        called for every image in a test sequence
+        called sequentially for every image in a test sequence
 
         args: image as numpy array
         returns: segmentation prediction as numpy array

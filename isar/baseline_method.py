@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from PIL import Image
+from typing import List, Tuple
 import cv2
 import pickle
 import json
@@ -161,7 +162,7 @@ class BaselineMethod(GenericDetector):
         
         return
 
-    def test(self, img: np.ndarray, image_name: str, embedding: str):
+    def test(self, img: np.ndarray, image_name: str, embedding: str) -> np.ndarray:
         show_mask = None
 
         if self.start_reid:
@@ -226,10 +227,10 @@ class BaselineMethod(GenericDetector):
 
         return out, svm_predictions.reshape((self.upsampled_h, self.upsampled_w))
 
-    def predict_multi(self, img_features, img_square):
+    def predict_multi(self, img_features: torch.Tensor, img_square: np.ndarray):
 
         def calculate_reward(prediction_array, mask):
-            return (prediction_array * mask).sum() #/ mask.sum()
+            return (prediction_array * mask).sum()
         
         def create_reward_matrix(predictions_dict, masks):
             reward_matrix = []
@@ -293,7 +294,7 @@ class BaselineMethod(GenericDetector):
 
         return combined_mask
 
-    def combine_masks(self, mask_dict):
+    def combine_masks(self, mask_dict: dict):
         mask_shape = list(next(iter(mask_dict.values()))[0].shape)
         num_masks = len(mask_dict)
 
@@ -314,14 +315,14 @@ class BaselineMethod(GenericDetector):
 
         return combined_mask
 
-    def load_dino_v2_model(self, dino_model_type: str):
+    def load_dino_v2_model(self, dino_model_type: str) -> torch.nn.Module:
         model = torch.hub.load('facebookresearch/dinov2', dino_model_type)
         if torch.cuda.is_available():
             model = model.cuda()
         model.eval()
         return model
     
-    def preprocess_image_dino(self, image: np.ndarray):
+    def preprocess_image_dino(self, image: np.ndarray) -> torch.Tensor:
         transform = T.Compose([
         T.Resize((self.patch_h * 14, self.patch_w * 14)),
         T.CenterCrop((self.patch_h * 14, self.patch_w * 14)),
@@ -332,7 +333,7 @@ class BaselineMethod(GenericDetector):
         tensor = transform(image).unsqueeze(0).cuda()
         return tensor
     
-    def extract_features_dino(self, model, input_tensor):
+    def extract_features_dino(self, model, input_tensor: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             features = model.forward_features(input_tensor)['x_norm_patchtokens'].squeeze()
             # features = features.reshape(patch_h, patch_w, feat_dim)
@@ -347,7 +348,7 @@ class BaselineMethod(GenericDetector):
 
         return features
     
-    def compute_img_dino_embeddings(self, tensor_in, mask):
+    def compute_img_dino_embeddings(self, tensor_in: torch.Tensor, mask: np.ndarray) -> Tuple[torch.Tensor, np.ndarray]:
         self.upsampled_feature_vectors = False
         img_features = self.extract_features_dino(self.dino_model, tensor_in).to(device=self.device)
         if self.upsampled_feature_vectors:
@@ -361,7 +362,13 @@ class BaselineMethod(GenericDetector):
 
         return img_features, mask_flat
     
-    def initial_sam_prediction(self, x, y, img_square, img, embedding_sam, gt_mask, prompts = None):
+    def initial_sam_prediction(self, 
+                               x: int, y: int, 
+                               img_square: np.ndarray, 
+                               img: np.ndarray, 
+                               embedding_sam: str, 
+                               gt_mask: np.ndarray, 
+                               prompts: dict = None) -> np.ndarray:
         if gt_mask is not None:
             mask = gt_mask
             mask = cv2.resize(mask, (512, 512), interpolation=cv2.INTER_NEAREST) > 0.5
@@ -400,7 +407,7 @@ class BaselineMethod(GenericDetector):
                 self.sam_predictor.reset_image()
         return mask
     
-    def set_sam_img_embedding(self, image: np.ndarray, embedding = None):
+    def set_sam_img_embedding(self, image: np.ndarray, embedding: str = None) -> None:
 
         # get image embedding with precomputed embeddings, if available:
         if self.use_precomputed_sam_embedding and embedding is not None:
@@ -433,7 +440,11 @@ class BaselineMethod(GenericDetector):
         else:
             self.sam_predictor.set_image(image, image_format='BGR')
 
-    def create_svm_dataset(self, img_features: torch.Tensor, mask_flat: np.ndarray, dataset: str, task: str):
+    def create_svm_dataset(self, 
+                           img_features: torch.Tensor, 
+                           mask_flat: np.ndarray, 
+                           dataset: str, 
+                           task: str) -> Tuple[torch.utils.data.TensorDataset, torch.Tensor]:
         positive_features = img_features[mask_flat, :]
         all_negative_features_image = img_features[~mask_flat, :]
         negative_indices = torch.randperm(all_negative_features_image.shape[0])[:min(self.n_negative_features_same_image, all_negative_features_image.shape[0])]
@@ -473,7 +484,9 @@ class BaselineMethod(GenericDetector):
 
         return tensor_dataset, weights
     
-    def train_svm(self, svm, dataloader):
+    def train_svm(self, 
+                  svm: nn.Linear, 
+                  dataloader: torch.utils.data.dataloader.DataLoader) -> Tuple[nn.Linear, List[float]]:
         optimizer = optim.Adam(svm.parameters(), lr=0.1)
         loss_list = []
         for epoch in range(11):
@@ -494,7 +507,9 @@ class BaselineMethod(GenericDetector):
 
         return svm, loss_list
     
-    def train_svm_conv(self, svm_conv, dataloader):
+    def train_svm_conv(self, 
+                       svm_conv: nn.Conv1d, 
+                       dataloader: torch.utils.data.dataloader.DataLoader) -> Tuple[nn.Conv1d, List[float]]:
         optimizer = optim.Adam(svm_conv.parameters(), lr=0.1)
         loss_list = []
         for epoch in range(4):
@@ -515,7 +530,9 @@ class BaselineMethod(GenericDetector):
         
         return svm_conv, loss_list
     
-    def show_mask(self, mask: np.ndarray, color: np.ndarray = None):
+    def show_mask(self, 
+                  mask: np.ndarray, 
+                  color: np.ndarray = None) -> np.ndarray:
         if color is not None:
             color = color
         else:
@@ -525,7 +542,7 @@ class BaselineMethod(GenericDetector):
         
         return mask_image.astype("uint8")
     
-    def get_bbox_from_mask(self, mask: np.ndarray):
+    def get_bbox_from_mask(self, mask: np.ndarray) -> Tuple[int, int, int, int]:
         mask = mask.squeeze().astype(np.uint8)
         if np.sum(mask) == 0:
             return None
@@ -539,7 +556,10 @@ class BaselineMethod(GenericDetector):
         # Return the bounding box coordinates as a tuple
         return (col_min, row_min, col_max, row_max)
 
-    def visualize_svm_distance(self, svm_predictions, img, semantic_id):
+    def visualize_svm_distance(self, 
+                               svm_predictions: np.ndarray, 
+                               img: np.ndarray, 
+                               semantic_id: int) -> None:
 
         if self.upsampled_feature_vectors:
             svm_dist = svm_predictions.reshape((self.upsampled_h, self.upsampled_w))
@@ -564,7 +584,10 @@ class BaselineMethod(GenericDetector):
         
         cv2.imshow("SVM Dist", cv2.addWeighted(img, 0.2, (svm_dist*255).astype("uint8"), 0.8, 0.0))
     
-    def sam_refinement(self, img, mask, svm_predictions):
+    def sam_refinement(self, 
+                       img: np.ndarray, 
+                       mask: np.ndarray, 
+                       svm_predictions: np.ndarray) -> np.ndarray:
 
         prompt_points, prompt_labels = self.get_sam_prompts(svm_predictions, mask)
         #could also sample positive points from the mask and negative from outside the mask
@@ -580,14 +603,19 @@ class BaselineMethod(GenericDetector):
 
         return mask_refined.squeeze(0)
 
-    def one_hot_encode_binary_mask(self, mask):
+    def one_hot_encode_binary_mask(self, mask: np.ndarray) -> List[np.ndarray]:
         num_labels, labeled_mask, stats, centroid = cv2.connectedComponentsWithStats(mask.astype(np.uint8))
         total_area = np.sum((mask > 0))
         masks_ = [(labeled_mask == i) for i in np.unique(labeled_mask) if i != 0 and np.sum((labeled_mask == i)) > total_area * 0.2]
 
         return masks_
     
-    def get_sam_prompts(self, svm_predictions, mask, neighborhood_size=5, n_maxima=8, n_negative_points=0):
+    def get_sam_prompts(self, 
+                        svm_predictions: np.ndarray, 
+                        mask: np.ndarray, 
+                        neighborhood_size: int = 5, 
+                        n_maxima: int = 8, 
+                        n_negative_points: int = 0) -> Tuple[np.ndarray, np.ndarray]:
         neighborhood_size = neighborhood_size
         n_maxima = n_maxima
         n_negative_points = n_negative_points

@@ -11,7 +11,7 @@ from evaluation import Evaluation
 from baseline_method import BaselineMethod
 
 class Benchmark():
-    def __init__(self, outdir, datadir_single_obj, datadir_multi_obj, device="cpu"):
+    def __init__(self, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
         self.datasets = ['single_object', 'multi_object']
         self.modes = ['single_shot', 'multi_shot']
         self.datadir_single_obj = datadir_single_obj
@@ -35,7 +35,7 @@ class Benchmark():
             for mode in self.modes:
                 self.run_dataset(dataset, mode)
 
-    def run_dataset(self, dataset, mode):
+    def run_dataset(self, dataset: str, mode: str):
         self.dataset = dataset
         if dataset == 'single_object':
             self.stats[dataset] = self.run_single_object(self.datadir_single_obj, single_shot=(mode == 'single_shot'))
@@ -44,7 +44,7 @@ class Benchmark():
         else:
             raise Exception("Dataset {} not supported".format(dataset))
     
-    def run_single_object(self, datadir, single_shot=True):
+    def run_single_object(self, datadir: str, single_shot: bool = True):
         taskdir = datadir
         dataset_stats = {}
 
@@ -54,7 +54,7 @@ class Benchmark():
         
         return dataset_stats
     
-    def run_multi_object(self, datadir, single_shot=True):
+    def run_multi_object(self, datadir: str, single_shot: bool = True) -> dict:
         taskdir = datadir
         dataset_stats = {}
 
@@ -64,7 +64,7 @@ class Benchmark():
         
         return dataset_stats
     
-    def run_task_single_object(self, taskdir, task, single_shot=True):
+    def run_task_single_object(self, taskdir: str, task: str, single_shot: bool = True) -> dict:
 
         ###################
         # TRAIN SEQUENCES #
@@ -120,7 +120,7 @@ class Benchmark():
         return task_stats
 
 
-def main(outdir, datadir_single_object, datadir_multi_object, device):
+def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, device: str) -> None:
 
     bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
     now = datetime.now()
