@@ -105,16 +105,20 @@ class Evaluation():
         return contour_image
 
     def compute_boundary_f_measure(self, predicted_mask, gt_mask):
-        predicted_contours = self.find_contours(predicted_mask)
-        gt_contours = self.find_contours(gt_mask)
+        if predicted_mask.sum() > 0:
+            predicted_contours = self.find_contours(predicted_mask)
+            gt_contours = self.find_contours(gt_mask)
+            
+            predicted_contours = (predicted_contours.flatten() > 0).astype(int)
+            gt_contours = (gt_contours.flatten() > 0).astype(int)
+            
+            # Calculate precision, recall, and F-measure. TODO: compute separately to take care of zero case.
+            precision, recall, f_measure, _ = precision_recall_fscore_support(gt_contours, predicted_contours, average='binary', zero_division=1)
+            
+            return precision, recall, f_measure
         
-        predicted_contours = (predicted_contours.flatten() > 0).astype(int)
-        gt_contours = (gt_contours.flatten() > 0).astype(int)
-        
-        # Calculate precision, recall, and F-measure. TODO: compute separately to take care of zero case.
-        precision, recall, f_measure, _ = precision_recall_fscore_support(gt_contours, predicted_contours, average='binary', zero_division=1)
-        
-        return precision, recall, f_measure
+        else:
+            return 0.0, 0.0, 0.0
         
 
     def compute_evaluation_metrics(self, mask, image_name):
@@ -125,7 +129,7 @@ class Evaluation():
             mask_bin = np.all(mask==color, axis=-1)
             gt_mask_bin = (gt_mask == id)
 
-            if gt_mask_bin.sum() > 0 and mask_bin.sum() > 0:
+            if gt_mask_bin.sum() > 0:
                 iou = self.compute_IoU(mask_bin, gt_mask_bin)
                 prec, rec, boundary_f_measure = self.compute_boundary_f_measure(mask_bin.astype("uint8"), gt_mask_bin.astype("uint8"))
                 self.ious[id][image_name] = iou
