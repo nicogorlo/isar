@@ -71,8 +71,6 @@ class BaselineMethod(GenericDetector):
         self.color_map = {}
 
     def on_new_task(self, info: dict):
-        super().on_new_task()
-
         self.info = info
         self.color_map = info["color_map"]
         self.svms = {}
