@@ -179,11 +179,6 @@ class BaselineMethod(GenericDetector):
                 mask_info[semantic_id] = (out, svm_predictions)# / self.margins[semantic_id])
 
             combined_mask = self.predict_multi(img_features, img_square)
-            # cv2.imshow("mask_comb1100", cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask_info[1100][0]).astype("uint8"), 0.7, 0.0))
-            # cv2.waitKey(1)
-            # cv2.imshow("mask_comb1103", cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask_info[1103][0], color = np.array([0, 255, 0])).astype("uint8"), 0.7, 0.0))
-            # cv2.waitKey(1)
-            # combined_mask = self.combine_masks(mask_info)
 
             combined_mask_rgb = np.zeros((self.upsampled_h, self.upsampled_w, 3))
             for semantic_id in sorted(list(self.svms.keys())): 
@@ -237,8 +232,7 @@ class BaselineMethod(GenericDetector):
                 for mask in masks:
                     reward_row.append(calculate_reward(prediction_array, mask))
                 reward_matrix.append(reward_row)
-                # print(semantic_id, "|", reward_row)
-                # print("----------------------------------------")
+                
             return reward_matrix
         
         def assign_masks(predictions_dict, masks):
@@ -284,7 +278,6 @@ class BaselineMethod(GenericDetector):
 
         assigned_masks, avg_preds = assign_masks(svm_predictions, masks)
 
-        # current problem: Different numbers of train samples makes the svm predictions not comparable
         for semantic_id, pred in sorted(avg_preds.items(), key = lambda x: x[1]):
             if out[semantic_id].sum() == 0 or svm_predictions[semantic_id][assigned_masks[semantic_id]].sum() < 0.0:
                 continue
@@ -334,14 +327,13 @@ class BaselineMethod(GenericDetector):
     def extract_features_dino(self, model, input_tensor: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
             features = model.forward_features(input_tensor)['x_norm_patchtokens'].squeeze()
-            # features = features.reshape(patch_h, patch_w, feat_dim)
+
             if self.upsampled_feature_vectors:
                 features = features.reshape(self.patch_w, self.patch_h, -1).to(device=self.device)
                 features = self.upsampler(features.permute(2, 0, 1).unsqueeze(0)).squeeze(0).permute(1, 2, 0)
                 features = features.reshape(self.upsampled_h * self.upsampled_w, -1)
 
             # normalize features:
-
             features = features / torch.norm(features, dim=-1, keepdim=True)
 
         return features
@@ -461,7 +453,7 @@ class BaselineMethod(GenericDetector):
             negative_features = torch.cat(negative_features).to(device=self.device)
 
         all_negative_features = torch.cat((negative_features, negative_features_image))
-        # all_negative_features = negative_features_image
+
         negative_labels = torch.zeros(all_negative_features.shape[0])
         positive_labels = torch.ones(positive_features.shape[0])
 
@@ -588,12 +580,11 @@ class BaselineMethod(GenericDetector):
                        svm_predictions: np.ndarray) -> np.ndarray:
 
         prompt_points, prompt_labels = self.get_sam_prompts(svm_predictions, mask)
-        #could also sample positive points from the mask and negative from outside the mask
+
         bbox = np.array(self.get_bbox_from_mask(mask))
         mask = cv2.resize(mask.astype("float32"), (256, 256)) > 0.5
 
         mask_refined, iou_prediction, logits = self.sam_predictor.predict(
-                    # mask_input=np.expand_dims(mask * 20 - 10, axis=0),
                     point_coords=prompt_points,
                     point_labels=prompt_labels.T,
                     multimask_output=False,
