@@ -31,6 +31,8 @@ class Benchmark():
 
     "iterate over all datasets (single_object, multi_object)"
     def run(self):
+        self.stats['single_object'] = {}
+        self.stats['multi_object'] = {}
         for dataset in self.datasets:
             for mode in self.modes:
                 self.run_dataset(dataset, mode)
@@ -38,33 +40,23 @@ class Benchmark():
     def run_dataset(self, dataset: str, mode: str):
         self.dataset = dataset
         if dataset == 'single_object':
-            self.stats[dataset] = self.run_single_object(self.datadir_single_obj, single_shot=(mode == 'single_shot'))
+            self.stats[dataset][mode] = self.run_scenario(self.datadir_single_obj, single_shot=(mode == 'single_shot'))
         elif dataset == 'multi_object':
-            self.stats[dataset] = self.run_multi_object(self.datadir_multi_obj, single_shot=(mode == 'single_shot'))
+            self.stats[dataset][mode] = self.run_scenario(self.datadir_multi_obj, single_shot=(mode == 'single_shot'))
         else:
             raise Exception("Dataset {} not supported".format(dataset))
     
-    def run_single_object(self, datadir: str, single_shot: bool = True):
+    def run_scenario(self, datadir: str, single_shot: bool = True) -> dict:
         taskdir = datadir
         dataset_stats = {}
 
         for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
-            task_stats = self.run_task_single_object(taskdir, task, single_shot=single_shot)
+            task_stats = self.run_task(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
         return dataset_stats
     
-    def run_multi_object(self, datadir: str, single_shot: bool = True) -> dict:
-        taskdir = datadir
-        dataset_stats = {}
-
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
-            task_stats = self.run_task_single_object(taskdir, task, single_shot=single_shot)
-            dataset_stats.update(task_stats)
-        
-        return dataset_stats
-    
-    def run_task_single_object(self, taskdir: str, task: str, single_shot: bool = True) -> dict:
+    def run_task(self, taskdir: str, task: str, single_shot: bool = True) -> dict:
 
         ###################
         # TRAIN SEQUENCES #
@@ -127,7 +119,7 @@ def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, dev
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
     # bm.run_dataset('multi_object', 'multi_shot')
     bm.run()
-    stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_dino_sam_refinement.json")
+    stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
         json.dump(bm.stats, f, indent=4)
