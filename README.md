@@ -8,8 +8,10 @@ This work has been tested in a python 3.9 environment.
 
 1. Install dependencies
 
+    ```
     pip install cython
     pip install -r requirements.txt
+    ```
 
 2. Download Dataset (>70GB)
 
@@ -19,11 +21,15 @@ dataset release pending
 
 1. Download model weights
 
+    ```
     python3 ./isar/util/download_model_weights.py
+    ```
 
 2. run benchmark
 
+    ```
     python3 benchmark.py (...)
+    ```
 
 ## Benchmark
 
