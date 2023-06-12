@@ -1,6 +1,8 @@
 
 isar/modelzoo/*
 isar/owdetr_cpts/*
+isar/dinov2_cpts/*
+isar/feature_dict_dinov2/*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -8,7 +8,7 @@
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
-            "program": "${cwd}/main.py",
+            "program": "${cwd}/benchmark.py",
             "console": "integratedTerminal",
             "justMyCode": true
         }

@@ -6,24 +6,23 @@ from tqdm import tqdm
 import torch
 torch.set_grad_enabled(False)
 
-# from util.isar_utils import performance_measure
 
 from segment_anything import sam_model_registry, SamPredictor
 
-
-
-# very basic. So far sequential, batching would be way better
-
-
+"""
+Precomputes the SAM image embeddings for the DAVIS and Habitat datasets.
+"""
 class PrecomputeImgEmbedding():
-    def __init__(self):
+    def __init__(self, datadir_davis, datadir_habitat, sam_checkpoint):
         self.datasets = ['DAVIS_single_obj', 'Habitat_single_obj']
-        self.datadir_DAVIS = "/home/gorlon/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/"
-        self.datadir_Habitat_single_obj = "/home/gorlon/semesterproject/data/habitat_single_object_tracking/"
+        self.datadir_DAVIS = datadir_davis
+        self.datadir_Habitat_single_obj = datadir_habitat
 
-        sam_checkpoint = "~/home/gorlon/semesterproject/modelzoo/sam_vit_h_4b8939.pth"
+
         device = "cuda"
         model_type = "vit_h"
+
+        self.img_size = 512
 
         sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         sam.to(device=device)
@@ -64,7 +63,8 @@ class PrecomputeImgEmbedding():
 
                 image = cv2.imread(img_path)
 
-                # with performance_measure("set image - task:{}; image name:{}".format(task, image_name)):                
+                image = cv2.resize(image, (self.img_size, self.img_size))
+               
                 self.predictor.set_image(image, image_format='BGR')
 
                 features = self.predictor.get_image_embedding()
@@ -94,17 +94,36 @@ class PrecomputeImgEmbedding():
                     continue
 
                 image = cv2.imread(img_path)
+
+                image = cv2.resize(image, (self.img_size, self.img_size))
                 
-                # with performance_measure("set image - task:{}; image name:{}".format(task, image_name)): 
                 self.predictor.set_image(image, image_format='BGR')
 
                 features = self.predictor.get_image_embedding()
 
                 torch.save(features, out_path)
 
+import argparse
 
 def main():
-    precompute_img_emb = PrecomputeImgEmbedding()
+    parser = argparse.ArgumentParser(description="Precompute image embeddings")
+
+    parser.add_argument(
+        "-dd", "--datadir_davis", type=str, default="", 
+        help="Path to the DAVIS dataset"
+    )
+    parser.add_argument(
+        "-dh", "--datadir_habitat", type=str, default="", 
+        help="Path to the Habitat dataset"
+    )
+    parser.add_argument(
+        "-cp", "--checkpoint", type=str, default="../modelzoo/sam_vit_h_4b8939.pth",
+        help="Path to the output directory"
+    )
+
+    args = parser.parse_args()
+
+    precompute_img_emb = PrecomputeImgEmbedding(args.datadir_davis, args.datadir_habitat, args.checkpoint)
     precompute_img_emb.precompute_img_emb()
 
 

@@ -3,21 +3,23 @@ import cv2
 import os
 import json
 from pathlib import Path
+from datetime import datetime
+import argparse
 
-from detector import Detector
-from reidentification import Reidentification
 from evaluation import Evaluation
-from util.isar_utils import get_image_it_from_folder
 
+from baseline_method import BaselineMethod
 
 class Benchmark():
-    def __init__(self, outdir):
-        self.datasets = ['DAVIS_single_obj', 'Habitat_single_obj']
-        self.datadir_DAVIS = "/home/nico/semesterproject/data/DAVIS_single_object_tracking"
-        self.datadir_Habitat_single_obj = "/home/nico/semesterproject/data/habitat_single_object_tracking/"
+    def __init__(self, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
+        self.datasets = ['single_object', 'multi_object']
+        self.modes = ['single_shot', 'multi_shot']
+        self.datadir_single_obj = datadir_single_obj
+        self.datadir_multi_obj = datadir_multi_obj
 
-        self.detector = Detector("cpu", "vit_h")
+        self.detector = BaselineMethod(device, "vit_h", "dinov2_vitl14", use_precomputed_sam_embeddings = True, outdir = outdir)
 
+        self.dataset = None
         self.stats = {}
 
         self.detector.show_images = True
@@ -27,91 +29,120 @@ class Benchmark():
         if self.detector.show_images:
             cv2.namedWindow("seg")
 
-
-    "iterate over all datasets (DAVIS_single_obj, Habitat_single_obj)"
+    "iterate over all datasets (single_object, multi_object)"
     def run(self):
+        self.stats['single_object'] = {}
+        self.stats['multi_object'] = {}
         for dataset in self.datasets:
-            self.run_dataset(dataset)
+            for mode in self.modes:
+                self.run_dataset(dataset, mode)
 
-    def run_dataset(self, dataset):
-        if dataset == 'DAVIS_single_obj':
-            self.stats[dataset] = self.run_single_object(self.datadir_DAVIS)
-        elif dataset == 'Habitat_single_obj':
-            self.stats[dataset] = self.run_single_object(self.datadir_Habitat_single_obj)
+    def run_dataset(self, dataset: str, mode: str):
+        self.dataset = dataset
+        if dataset == 'single_object':
+            self.stats[dataset][mode] = self.run_scenario(self.datadir_single_obj, single_shot=(mode == 'single_shot'))
+        elif dataset == 'multi_object':
+            self.stats[dataset][mode] = self.run_scenario(self.datadir_multi_obj, single_shot=(mode == 'single_shot'))
         else:
             raise Exception("Dataset {} not supported".format(dataset))
-        
-    "iterate over all tasks in a dataset (e.g. 'car', 'duck', 'giraffe', ...)"        
-    def run_single_object(self, datadir):
-
+    
+    def run_scenario(self, datadir: str, single_shot: bool = True) -> dict:
         taskdir = datadir
-
-        with open(os.path.join(taskdir, 'prompt_dict.json'), 'r') as f:
-            prompt_dict = json.load(f)
-
         dataset_stats = {}
 
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
+            task_stats = self.run_task(taskdir, task, single_shot=single_shot)
+            dataset_stats.update(task_stats)
         
-        for task in [i for i in sorted(os.listdir(taskdir)) if ".json" not in i][:50]:
-            print("Task: ", task)
-
-            imgdir = os.path.join(taskdir, task, 'rgb/')
-            evaldir = os.path.join(taskdir, task, 'semantics/')
-            embdir = os.path.join(taskdir, task, 'embeddings/')
-            task_stats = self.run_task(task, imgdir, evaldir, embdir, prompt_dict[task])
-            dataset_stats[task] = task_stats
-
         return dataset_stats
     
-    "iterate over all images in a task (e.g. '0000000.jpg', '0000001.jpg', ...)"
-    def run_task(self, task, imgdir, evaldir, embdir, prompt=None):
+    def run_task(self, taskdir: str, task: str, single_shot: bool = True) -> dict:
 
-        self.detector.outdir = os.path.join(self.outdir, task)
+        ###################
+        # TRAIN SEQUENCES #
+        ###################
+        with open(os.path.join(taskdir, task, 'info.json'), 'r') as f:
+            info = json.load(f)
+        semantic_ids = info['semantic_ids']
+        color_map = info['color_map']
+        train_dir = os.path.join(taskdir, task, 'train/')
+        train_scenes = sorted(os.listdir(train_dir))
+        prompts = {}
+
+        self.detector.on_new_task(info)
         
-        if not os.path.exists(os.path.join(self.outdir, task)):
-            os.makedirs(os.path.join(self.outdir, task))
-        eval = Evaluation(evaldir)
-        ious = {}
+        for scene in train_scenes:
+            if single_shot:
+                with open(os.path.join(train_dir, scene, 'prompts_single.json'), 'r') as f:
+                    prompt_dict = json.load(f)
+                prompts[scene] = prompt_dict
+            else:
+                with open(os.path.join(train_dir, scene, 'prompts_multi.json'), 'r') as f:
+                    prompt_dict = json.load(f)
+                prompts[scene] = prompt_dict
+        
+        self.detector.train(train_dir, train_scenes, semantic_ids, prompts)
+        
+        ##################
+        # TEST SEQUENCES #
+        ##################
+        test_dir = os.path.join(taskdir, task, 'test/')
+        test_scenes = os.listdir(test_dir)
+        task_stats = {}
+        
+        for scene in test_scenes:
+            image_dir = os.path.join(test_dir, scene, "color/")
+            eval_dir = os.path.join(test_dir, scene, "semantic_raw/")
+            eval = Evaluation(eval_dir, info)
+            ious = {}
+            self.detector.on_new_test_sequence()
+            for image_name in sorted(os.listdir(image_dir)):
+                self.detector.outdir = os.path.join(self.outdir, task, scene)
+                if not os.path.exists(self.detector.outdir):
+                    os.makedirs(self.detector.outdir)
+                img = cv2.imread(os.path.join(image_dir, image_name))
+                emb = os.path.join(test_dir, scene, "embeddings/", image_name.replace(".jpg", ".pt"))
 
-        image_names = sorted(os.listdir(imgdir))
+                seg = self.detector.test(img, image_name, emb)
 
-        if prompt is not None:
-            img0 = cv2.imread(os.path.join(imgdir, image_names[0]))
-            emb0 = os.path.join(embdir, image_names[0].replace(".jpg", ".pt"))
-            prob, boxes, seg = self.detector.detect(img0, image_names[0], embedding=emb0)
-            cutout, seg, freeze, selected_prob, selected_box = self.detector.on_click(x = prompt['x'], y = prompt['y'], img = img0, embedding=emb0)
-            image_names.pop(0)
-
-
-        for image_name in image_names:
-            img = cv2.imread(os.path.join(imgdir, image_name))
-            emb = os.path.join(embdir, image_name.replace(".jpg", ".pt"))
-
-            prob, boxes, seg = self.detector.detect(img, image_name, emb)
-
-            if self.detector.start_reid:
-                eval.compute_evaluation_metrics(cv2.cvtColor(np.float32(seg), cv2.COLOR_BGR2GRAY) > 0, eval.get_gt_mask(image_name), image_name)
-
-
-            if self.detector.show_images:
                 cv2.waitKey(1)
-
-        task_stats = eval.report_results(task)
-    
+                eval.compute_evaluation_metrics(seg, image_name)
+            scene_stats = eval.report_results(scene)
+            task_stats.update(scene_stats)
         return task_stats
-    
-from datetime import datetime
 
-def main():
-    
-    bm = Benchmark("/home/nico/semesterproject/test/")
+
+def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, device: str) -> None:
+
+    bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run_dataset('DAVIS_single_obj')
-    stat_path = os.path.join(bm.outdir, f"stats_{now_str}_DAVIS_single_obj_20.json")
+    bm.run_dataset('multi_object', 'multi_shot')
+    bm.run()
+    stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
         json.dump(bm.stats, f, indent=4)
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a DAVIS and a Habitat dataset")
+
+    parser.add_argument(
+        "-ds", "--datadir_single_object", type=str, default="",
+        help="Path to the single object dataset"
+    )
+    parser.add_argument(
+        "-dm", "--datadir_multi_object", type=str, default="",
+        help="Path to the multi object dataset"
+    )
+    parser.add_argument(
+        "-o", "--outdir", type=str, default="",
+        help="Path to the output directory"
+    )
+    parser.add_argument(
+        "-dev", "--device", type=str, default="cpu", choices=["cpu", "cuda"],
+    )
+
+    args = parser.parse_args()
+    
+    main(args.outdir, args.datadir_single_object, args.datadir_multi_object, args.device)
