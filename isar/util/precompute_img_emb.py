@@ -6,13 +6,8 @@ from tqdm import tqdm
 import torch
 torch.set_grad_enabled(False)
 
-# from util.isar_utils import performance_measure
 
 from segment_anything import sam_model_registry, SamPredictor
-
-
-
-# very basic. So far sequential, batching would be way better
 
 """
 Precomputes the SAM image embeddings for the DAVIS and Habitat datasets.
@@ -114,15 +109,15 @@ def main():
     parser = argparse.ArgumentParser(description="Precompute image embeddings")
 
     parser.add_argument(
-        "-dd", "--datadir_davis", type=str, default="/home/nico/semesterproject/data/DAVIS_single_object_tracking/", 
+        "-dd", "--datadir_davis", type=str, default="", 
         help="Path to the DAVIS dataset"
     )
     parser.add_argument(
-        "-dh", "--datadir_habitat", type=str, default="/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/", 
+        "-dh", "--datadir_habitat", type=str, default="", 
         help="Path to the Habitat dataset"
     )
     parser.add_argument(
-        "-cp", "--checkpoint", type=str, default="/home/gorlon/semesterproject/modelzoo/sam_vit_h_4b8939.pth",
+        "-cp", "--checkpoint", type=str, default="../modelzoo/sam_vit_h_4b8939.pth",
         help="Path to the output directory"
     )
 

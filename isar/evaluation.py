@@ -76,29 +76,23 @@ class Evaluation():
     def false_detection_rate_visible_counter(self, id, mask, gt_mask, IoU_score):
         if IoU_score < 0.1 and np.sum(mask) > np.sum(gt_mask) * IoU_score and np.sum(gt_mask) > 0:
             self.false_detection_visible[id] += 1
-            # print("object lost")
 
     
     def false_detection_rate_not_visible_counter(self, id, mask, gt_mask):
         if np.sum(gt_mask) == 0 and np.sum(mask) > 0:
             self.false_detection_not_visible[id] += 1
-            # print("object lost")
 
     def object_visible_gt_counter(self, id, gt_mask):
         if np.sum(gt_mask) == 0:
             self.total_frames_not_visible[id] += 1
-            # print("object not visible")
         else:
             self.total_frames_visible[id] += 1
-            # print("object visible")
     
 
     def find_contours(self, mask):
         
-        # Use OpenCV to find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         
-        # Create an empty image to draw the contours
         contour_image = np.zeros_like(mask)
         cv2.drawContours(contour_image, contours, -1, (255), 1)
         
@@ -112,7 +106,6 @@ class Evaluation():
             predicted_contours = (predicted_contours.flatten() > 0).astype(int)
             gt_contours = (gt_contours.flatten() > 0).astype(int)
             
-            # Calculate precision, recall, and F-measure. TODO: compute separately to take care of zero case.
             precision, recall, f_measure, _ = precision_recall_fscore_support(gt_contours, predicted_contours, average='binary', zero_division=1)
             
             return precision, recall, f_measure

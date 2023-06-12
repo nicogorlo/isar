@@ -162,13 +162,13 @@ if __name__ == "__main__":
 
     parser.add_argument('--device', type=str, default='cpu', help='device')
 
-    parser.add_argument('--datadir', type=str, default='/home/nico/semesterproject/data/re-id_benchmark_ycb/single_object/cans/train/cans_on_counter/', help='path to data')
+    parser.add_argument('--datadir', type=str, default='', help='path to data')
 
-    parser.add_argument('--outdir', type=str, default='/home/nico/semesterproject/test/screenshots_debug/PCA', help='path to output directory')
+    parser.add_argument('--outdir', type=str, default='', help='path to output directory')
 
-    parser.add_argument('--img_train', type=str, default='0000083.jpg', help='path to image')
+    parser.add_argument('--img_train', type=str, default='', help='path to image')
 
-    parser.add_argument('--img_test', type=str, default='0000343.jpg', help='path to image')
+    parser.add_argument('--img_test', type=str, default='', help='path to image')
 
     parser.add_argument('--semantic_id', type=int, default=1100, help='semantic id')
 

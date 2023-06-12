@@ -4,10 +4,6 @@ import torch
 import clip
 from PIL import Image
 
-# import sys
-# sys.path.append('external/dino-vit-features')
-# from extractor import ViTExtractor
-
 class Reidentification():
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"

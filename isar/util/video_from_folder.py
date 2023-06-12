@@ -3,18 +3,15 @@ import os
 import argparse
 
 def generate_video(folder_path, semantic_path, output_name, frame_rate, visualize_semantics = False):
-    # Get the list of frames
+
     frame_files = sorted(os.listdir(folder_path))
 
-    # Read the first frame to get the dimensions (height, width)
     first_frame = cv2.imread(os.path.join(folder_path, frame_files[0]))
     height, width, _ = first_frame.shape
 
-    # Create a VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video_writer = cv2.VideoWriter(output_name, fourcc, frame_rate, (width, height))
 
-    # Iterate through the frames and write them to the video
     for frame_file in frame_files:
         frame = cv2.imread(os.path.join(folder_path, frame_file))
         semantic = cv2.imread(os.path.join(semantic_path, frame_file.replace("jpg", "png")))
@@ -25,7 +22,6 @@ def generate_video(folder_path, semantic_path, output_name, frame_rate, visualiz
         else:
             video_writer.write(frame)
 
-    # Release the VideoWriter object
     video_writer.release()
 
 
@@ -34,19 +30,19 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-i", "--img_folder", type=str, 
-        default="/home/nico/semesterproject/data/re-id_benchmark_ycb/multi_object/toys/test/toys_in_context/color/", 
+        default="", 
         help="Path to image folder"
     )
 
     parser.add_argument(
         "-g", "--gt_folder", type=str,
-        default="/home/nico/semesterproject/data/re-id_benchmark_ycb/multi_object/toys/test/toys_in_context/semantic/",
+        default="",
         help="Path to ground truth folder"
     )
 
     parser.add_argument(
         "-o", "--out_file", type=str, 
-        default="/home/nico/Videos/toys_test2.avi",
+        default="",
         help="Path to outfile"
     )
 

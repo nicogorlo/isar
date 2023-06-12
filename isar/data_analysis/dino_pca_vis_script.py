@@ -45,7 +45,6 @@ def extract_features_dino(model, input_tensor):
     with torch.no_grad():
         features_dict = model.forward_features(input_tensor)
         features = features_dict['x_norm_patchtokens']
-        # features = features.reshape(patch_h, patch_w, feat_dim)
     return features.squeeze()
 
 def img_to_pca_features_dino(model, pca, image):
@@ -75,7 +74,7 @@ from evaluation import Evaluation
 import os
 
 def main():
-    DATADIR = "/home/nico/semesterproject/data/DAVIS_single_object_tracking/pigs"
+    DATADIR = ""
     eval = Evaluation(os.path.join(DATADIR, "semantics"))
     image_names = sorted(os.listdir(os.path.join(DATADIR, "rgb")))
     gt_mask = eval.get_gt_mask(image_names[0])
@@ -96,8 +95,6 @@ def main():
     cv2.namedWindow("pca")
     cv2.namedWindow("image")
     cv2.imshow("pca", pca_features)
-
-    # overlay_grid(image, (patch_w, patch_h))
 
     cv2.imshow("image", image)
 

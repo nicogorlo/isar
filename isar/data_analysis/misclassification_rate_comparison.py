@@ -22,7 +22,7 @@ def plot_mious(mious_list, titles):
     width = 0.8 / len(mious_list)
 
     fig, ax = plt.subplots()
-    #start from color 2: 
+
     colors = plt.cm.get_cmap('tab10', 10).colors[1:]
 
     for i, (mious, title) in enumerate(zip(mious_list, titles)):

@@ -94,12 +94,7 @@ class BaselineMethod(GenericDetector):
                     scene_prompts[int(semantic_id)].update({os.path.join(train_dir, scene, "color/", img + ".jpg"): prompt[semantic_id]})
             prompts_rearranged.update(scene_prompts)
         
-
-        ###################################################
-        #### TODO: create SVM for each semantic class: ####
-        ###################################################
         
-        positive_samples = {}
         for semantic_id in semantic_ids:
             prompts_class = prompts_rearranged[semantic_id]
             imgs = []
@@ -115,21 +110,17 @@ class BaselineMethod(GenericDetector):
             img_features_list = []
 
             for idx, img in enumerate(imgs):
-                # TODO: could add mirrored image for initial training
 
                 img_square = cv2.resize(img, (self.upsampled_h, self.upsampled_w), interpolation=cv2.INTER_LINEAR)
-                # 1. predict mask with sam_predictor
+
                 mask = self.initial_sam_prediction(0, 0, img_square, img, embeddings_sam[idx], None, list(prompts_class.values())[idx]) 
 
                 cv2.imshow("seg", 
                            cv2.resize(cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask).astype("uint8"), 0.7, 0), (img.shape[1],img.shape[0])))
                 cv2.waitKey(1)
                 
-                # cv2.waitKey(100)
-                # 2. preprocess image dino
                 tensor_in = self.preprocess_image_dino(img)
 
-                # 3. compute masked dino embeddings
                 img_features, mask_flat = self.compute_img_dino_embeddings(tensor_in, mask)
 
                 flat_masks_list.append(mask_flat)
@@ -176,7 +167,7 @@ class BaselineMethod(GenericDetector):
 
             for semantic_id in sorted(list(self.svms.keys())):
                 out, svm_predictions = self.predict_svm(img_features, img, semantic_id)
-                mask_info[semantic_id] = (out, svm_predictions)# / self.margins[semantic_id])
+                mask_info[semantic_id] = (out, svm_predictions) / self.margins[semantic_id]
 
             combined_mask = self.predict_multi(img_features, img_square)
 
@@ -539,11 +530,9 @@ class BaselineMethod(GenericDetector):
         
         row_indices, col_indices = np.where(mask)
 
-        # Calculate the min and max row and column indices
         row_min, row_max = np.min(row_indices), np.max(row_indices)
         col_min, col_max = np.min(col_indices), np.max(col_indices)
 
-        # Return the bounding box coordinates as a tuple
         return (col_min, row_min, col_max, row_max)
 
     def visualize_svm_distance(self, 
@@ -619,10 +608,8 @@ class BaselineMethod(GenericDetector):
 
         maxima_values = svm_predictions[coordinates]
 
-        # Get the indices of the top n maxima
         top_n_indices = np.argpartition(maxima_values, -n_maxima)[-n_maxima:]
 
-        # Get the coordinates of the top n maxima
         top_n_coordinates = coordinates[0][top_n_indices], coordinates[1][top_n_indices]
 
         positive_points = np.array(top_n_coordinates).T
@@ -633,6 +620,7 @@ class BaselineMethod(GenericDetector):
 
         negative_sample_space = svm_predictions < 0.0
         negative_points = np.array(np.where(negative_sample_space)).T
+        
         #random_subset:
         negative_points = negative_points[np.random.choice(negative_points.shape[0], n_negative_points, replace=False)]
         negative_points = negative_points[:,(-1,0)]

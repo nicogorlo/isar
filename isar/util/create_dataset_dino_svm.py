@@ -55,13 +55,10 @@ class CreateDinoDataset():
 
                 indices = torch.randperm(features.shape[0])[:self.features_per_image]
 
-                # show location of indices:
                 for i in indices:
                     coords = (i % self.patch_w * self.img_size/self.patch_w, i // self.patch_h * self.img_size/self.patch_h)
                     coords = (int(coords[0]* img.shape[1]/self.img_size), int(coords[1]* img.shape[0]/self.img_size))
                     cv2.circle(img, coords, 5, (0, 0, 255), -1)
-                # cv2.imshow("img", img)
-                # cv2.waitKey(15)
 
                 features_sampled = features[indices, :]
 
@@ -92,7 +89,6 @@ class CreateDinoDataset():
         with torch.no_grad():
             features_dict = model.forward_features(input_tensor)
             features = features_dict['x_norm_patchtokens']
-            # features = features.reshape(patch_h, patch_w, feat_dim)
         return features.squeeze()
 
 
@@ -102,11 +98,11 @@ def main():
     parser = argparse.ArgumentParser(description="Precompute image embeddings")
 
     parser.add_argument(
-        "-dd", "--datadir_davis", type=str, default="/home/nico/semesterproject/data/DAVIS_single_object_tracking/", 
+        "-dd", "--datadir_davis", type=str, default="", 
         help="Path to the DAVIS dataset"
     )
     parser.add_argument(
-        "-dh", "--datadir_habitat", type=str, default="/home/nico/semesterproject/data/habitat_single_object_tracking/", 
+        "-dh", "--datadir_habitat", type=str, default="", 
         help="Path to the Habitat dataset"
     )
     parser.add_argument(

@@ -4,6 +4,7 @@ import numpy as np
 from pathlib import Path
 import random
 import colorsys
+import argparse
 
 
 def generate_color_palette(num_colors):
@@ -16,7 +17,12 @@ def generate_color_palette(num_colors):
 
 
 if __name__ == "__main__":
-    datadir = "/home/nico/semesterproject/data/re-id_benchmark_ycb/single_object/"
+
+    parser = argparse.ArgumentParser(description="Precompute image embeddings")
+    parser.add_argument("--datadir", type=str, default="")
+    args = parser.parse_args()
+
+    datadir = args.datadir
     info = {}
     prompts = {}
 

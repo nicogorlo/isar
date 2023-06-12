@@ -50,7 +50,7 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i) and i == "toys"]:
             task_stats = self.run_task(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
@@ -117,7 +117,7 @@ def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, dev
     bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    # bm.run_dataset('multi_object', 'multi_shot')
+    bm.run_dataset('multi_object', 'multi_shot')
     bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
@@ -128,15 +128,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a DAVIS and a Habitat dataset")
 
     parser.add_argument(
-        "-ds", "--datadir_single_object", type=str, default="/home/nico/semesterproject/data/re-id_benchmark_ycb/single_object/",
+        "-ds", "--datadir_single_object", type=str, default="",
         help="Path to the single object dataset"
     )
     parser.add_argument(
-        "-dm", "--datadir_multi_object", type=str, default="/home/nico/semesterproject/data/re-id_benchmark_ycb/multi_object/",
+        "-dm", "--datadir_multi_object", type=str, default="",
         help="Path to the multi object dataset"
     )
     parser.add_argument(
-        "-o", "--outdir", type=str, default="/home/nico/semesterproject/test/",
+        "-o", "--outdir", type=str, default="",
         help="Path to the output directory"
     )
     parser.add_argument(

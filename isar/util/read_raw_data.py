@@ -166,10 +166,6 @@ def davis_dataset_reader(folder_davis_raw_frames, out_folder, semantic_folder, e
             img, show_mask = dr.get_mask(image)
             dr.visualize_and_save(img, show_mask)
 
-            # if os.path.exists(os.path.join(embedding_folder, scene, image + ".pt")):
-            #     embedding = torch.load(os.path.join(embedding_folder, scene, image + ".pt"))
-            #     torch.save(embedding, os.path.join(out_folder, scene, "embeddings", image + ".pt"))
-
             dr.count+=1
 
     prompt_dict_path = os.path.join(out_folder, "prompt_dict.json")
@@ -181,13 +177,13 @@ def main():
 
     Dataset = input("Which dataset do you want to use? (Habitat or Davis) ")
     if Dataset == 'Habitat':
-        habitat_dataset_reader(folder_habitat_raw_frames = "/home/nico/semesterproject/data/habitat_raw_frames", 
-                            out_folder = "/home/nico/semesterproject/vis_interim_pres")
+        habitat_dataset_reader(folder_habitat_raw_frames = "", 
+                            out_folder = "")
     if Dataset == 'Davis':
-        davis_dataset_reader(folder_davis_raw_frames = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/JPEGImages/480p/",
-                            out_folder = "/home/nico/semesterproject/data/vis_interim_pres/",
-                            semantic_folder = "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/Annotations_unsupervised/480p/",
-                            embedding_folder= "/home/nico/semesterproject/data/DAVIS-2017-Unsupervised-trainval-480p/DAVIS/ImageEmbeddings/")
+        davis_dataset_reader(folder_davis_raw_frames = "",
+                            out_folder = "",
+                            semantic_folder = "",
+                            embedding_folder= "")
 
 
     cv2.destroyAllWindows()
