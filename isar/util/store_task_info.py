@@ -8,12 +8,12 @@ import argparse
 
 
 def generate_color_palette(num_colors):
-        random.seed(42) 
-        hsv_tuples = [(x / num_colors, 1., 1.) for x in range(num_colors)]
-        random.shuffle(hsv_tuples)
-        rgb_tuples = map(lambda x: tuple(int(255 * i) for i in colorsys.hsv_to_rgb(*x)), hsv_tuples)
-        bgr_tuples = map(lambda x: (x[2], x[1], x[0]), rgb_tuples)
-        return list(bgr_tuples)
+    random.seed(42) 
+    hsv_tuples = [(x / num_colors, 1., 1.) for x in range(num_colors)]
+    random.shuffle(hsv_tuples)
+    rgb_tuples = map(lambda x: tuple(int(255 * i) for i in colorsys.hsv_to_rgb(*x)), hsv_tuples)
+    bgr_tuples = map(lambda x: (x[2], x[1], x[0]), rgb_tuples)
+    return list(bgr_tuples)
 
 
 if __name__ == "__main__":
