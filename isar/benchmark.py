@@ -50,7 +50,7 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i) and i == "toys"]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
             task_stats = self.run_task(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
