@@ -45,7 +45,7 @@ CLI arguments:
 The easiest way to test a new method on the dataset and recieve results in the same format as the baseline method is:
 1. Create new class inheriting from detector.GenericDetector
 2. Implement all member functions
-3. Replace the detector in benchmark.Benchmark with your own implementation
+3. Replace the detector in benchmark.py with your own implementation
 
 
 ## Folder structure:
