@@ -1,6 +1,6 @@
 import json
 import matplotlib.pyplot as plt
-plt.rc('font', family='Times New Roman', size=14)
+plt.rc('font', family='Palantino Linotype', size=14)
 import matplotlib.patches as mpatches
 import numpy as np
 import argparse
@@ -15,7 +15,7 @@ def read_json_file(filepath):
 def extract_attributes(datapath):
     attributes = {}
     for single_multi in ["single_object", "multi_object"]:
-        for task in os.listdir(os.path.join(datapath, single_multi)):
+        for task in [i for i in os.listdir(os.path.join(datapath, single_multi)) if "boxes" not in i]:
             for sequence in os.listdir(os.path.join(datapath, single_multi, task, "test")):
                 with open(os.path.join(datapath, single_multi, task, "test", sequence, "attributes.json"), 'r') as f:
                     attributes[sequence] = json.load(f)

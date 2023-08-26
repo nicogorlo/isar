@@ -14,7 +14,12 @@ def generate_video(folder_path, semantic_path, output_name, frame_rate, visualiz
 
     for frame_file in frame_files:
         frame = cv2.imread(os.path.join(folder_path, frame_file))
-        semantic = cv2.imread(os.path.join(semantic_path, frame_file.replace("jpg", "png")))
+
+        if os.path.exists(os.path.join(semantic_path, frame_file)):
+            semantic = cv2.imread(os.path.join(semantic_path, frame_file))
+        else:
+            semantic = cv2.imread(os.path.join(semantic_path, frame_file.replace(".jpg", ".png")))
+        
         combined = cv2.addWeighted(frame.astype('uint8'), 0.8, semantic.astype('uint8'), 0.2, 0).astype('uint8')
 
         if visualize_semantics:

@@ -50,7 +50,7 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
 
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "toys" in i)]:
             task_stats = self.run_task(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
@@ -90,7 +90,7 @@ class Benchmark():
         test_scenes = os.listdir(test_dir)
         task_stats = {}
         
-        for scene in test_scenes:
+        for scene in [i for i in test_scenes if "moving" in i]:
             image_dir = os.path.join(test_dir, scene, "color/")
             eval_dir = os.path.join(test_dir, scene, "semantic_raw/")
             eval = Evaluation(eval_dir, info)
@@ -118,14 +118,14 @@ def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, dev
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
     bm.run_dataset('multi_object', 'multi_shot')
-    bm.run()
+    # bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
         json.dump(bm.stats, f, indent=4)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a DAVIS and a Habitat dataset")
+    parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a given dataset")
 
     parser.add_argument(
         "-ds", "--datadir_single_object", type=str, default="",
