@@ -150,7 +150,8 @@ class Evaluation():
             else:
                 false_detection_rate_not_visible[id] = self.false_detection_not_visible[id] / self.total_frames_not_visible[id]
             
-            misclassification_rate[id] = self.misclassifications[id]/len(self.ious[id])
+            if len(self.ious[id]) > 0: 
+                misclassification_rate[id] = self.misclassifications[id]/len(self.ious[id])
 
         scene_miou = np.mean(list(self.mIoU.values()))
         scene_mboundf = np.mean(list(self.mBoundF.values()))
