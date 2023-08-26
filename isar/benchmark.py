@@ -49,8 +49,8 @@ class Benchmark():
     def run_scenario(self, datadir: str, single_shot: bool = True) -> dict:
         taskdir = datadir
         dataset_stats = {}
-
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i and "toys" in i)]:
+        
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
             task_stats = self.run_task(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
@@ -90,7 +90,7 @@ class Benchmark():
         test_scenes = os.listdir(test_dir)
         task_stats = {}
         
-        for scene in [i for i in test_scenes if "moving" in i]:
+        for scene in [i for i in test_scenes]:
             image_dir = os.path.join(test_dir, scene, "color/")
             eval_dir = os.path.join(test_dir, scene, "semantic_raw/")
             eval = Evaluation(eval_dir, info)
