@@ -28,7 +28,7 @@ class BaselineMethod(GenericDetector):
 
         #configurable parameters:
         self.start_reid = False
-        self.show_images = True
+        self.show_images = False
         self.device = device
         self.outdir = outdir
 
@@ -123,9 +123,6 @@ class BaselineMethod(GenericDetector):
 
                 mask = self.initial_sam_prediction(0, 0, img_square, img, embeddings_sam[idx], None, list(prompts_class.values())[idx]) 
 
-                cv2.imshow("seg", 
-                           cv2.resize(cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask).astype("uint8"), 0.7, 0), (img.shape[1],img.shape[0])))
-                cv2.waitKey(1)
                 
                 tensor_in = self.preprocess_image_dino(img)
 
@@ -580,9 +577,6 @@ class BaselineMethod(GenericDetector):
         svm_dist[margin, 2] = 1.0
         svm_dist[margin2, 1] = 1.0
         
-        if semantic_id == 1164:
-            cv2.imshow("SVM Dist", cv2.addWeighted(img, 0.2, (svm_dist*255).astype("uint8"), 0.8, 0.0))
-    
     def generate_color_palette(self, num_colors):
         random.seed(42) 
         hsv_tuples = [(x / num_colors, 1., 1.) for x in range(num_colors)]

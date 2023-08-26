@@ -22,7 +22,7 @@ class Benchmark():
         self.dataset = None
         self.stats = {}
 
-        self.detector.show_images = True
+        self.detector.show_images = False
 
         self.outdir = outdir
 
