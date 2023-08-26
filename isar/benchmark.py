@@ -12,6 +12,8 @@ from tqdm import tqdm
 
 from baseline_method import BaselineMethod
 
+from util.isar_utils import performance_measure
+
 class Benchmark():
     def __init__(self, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
         self.datasets = ['single_object', 'multi_object']
@@ -52,9 +54,11 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
         
-        for task in tqdm([i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]):
-            task_stats = self.run_task(taskdir, task, single_shot=single_shot)
-            dataset_stats.update(task_stats)
+        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
+            with performance_measure(f"Task {task}"):
+                task_stats = self.run_task(taskdir, task, single_shot=single_shot)
+                dataset_stats.update(task_stats)
+            print(f"Task {task} - stats: \n {task_stats}")
         
         return dataset_stats
     
