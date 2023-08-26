@@ -8,6 +8,8 @@ import argparse
 
 from evaluation import Evaluation
 
+from tqdm import tqdm
+
 from baseline_method import BaselineMethod
 
 class Benchmark():
@@ -50,7 +52,7 @@ class Benchmark():
         taskdir = datadir
         dataset_stats = {}
         
-        for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
+        for task in tqdm([i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]):
             task_stats = self.run_task(taskdir, task, single_shot=single_shot)
             dataset_stats.update(task_stats)
         
