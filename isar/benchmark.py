@@ -117,8 +117,8 @@ def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, dev
     bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run_dataset('multi_object', 'multi_shot')
-    # bm.run()
+    bm.datasets = ["multi_object"]
+    bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
     with open(stat_path, 'w') as f:
