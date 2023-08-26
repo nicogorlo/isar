@@ -187,18 +187,8 @@ class BaselineMethod(GenericDetector):
 
             if self.show_images:
                 cv2.imshow("seg", dst)
-
-            # debug = np.zeros(dst.shape[:2]).astype(np.uint16)
-            # for semantic_id in sorted(list(self.svms.keys())):
-            #     mask = mask_info[semantic_id][0]
-            #     mask = cv2.resize(mask.astype("float32"), dst.shape[1::-1]) > 0.5
-
-            #     debug[mask] = semantic_id
-
             cv2.waitKey(int(1000/30))
             cv2.imwrite(os.path.join(self.outdir, image_name), dst)
-
-            # cv2.imwrite(os.path.join(self.outdir, "debug_" + image_name.replace("jpg", "png")), debug)
 
             self.sam_predictor.reset_image()
             del img_features, svm_predictions, out
@@ -228,9 +218,7 @@ class BaselineMethod(GenericDetector):
     def predict_multi(self, img_features: torch.Tensor, img_square: np.ndarray):
 
         def calculate_reward(prediction_array: np.ndarray, mask: np.ndarray, prompt_points: list):
-            if np.any([mask[i[0]][i[1]] * 1000 for i in prompt_points]):
-                print("point in mask")
-            return (prediction_array * mask).sum()# + np.sum([mask[i[0]][i[1]] * 50000 for i in prompt_points])
+            return (prediction_array * mask).sum()
         
         def create_reward_matrix(predictions_dict: dict, masks: list, prompt_points: dict):
             reward_matrix = []
