@@ -57,6 +57,9 @@ class Benchmark():
         for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
             with performance_measure(f"Task {task}"):
                 task_stats = self.run_task(taskdir, task, single_shot=single_shot)
+                task_stat_path = os.path.join(self.outdir, task, "task_stats.json")
+                with open(task_stat_path, 'w') as f:
+                    json.dump(task_stats, f, indent=4)
                 dataset_stats.update(task_stats)
             print(f"Task {task} - stats: \n {task_stats}")
         
@@ -102,13 +105,14 @@ class Benchmark():
             eval = Evaluation(eval_dir, info)
             ious = {}
             self.detector.on_new_test_sequence()
+            outdir_scene = os.path.join(self.outdir, task, scene)
+            self.detector.outdir = outdir_scene
+            if not os.path.exists(self.detector.outdir):
+                os.makedirs(self.detector.outdir)
+
             for image_name in sorted(os.listdir(image_dir)):
-                self.detector.outdir = os.path.join(self.outdir, task, scene)
-                if not os.path.exists(self.detector.outdir):
-                    os.makedirs(self.detector.outdir)
                 img = cv2.imread(os.path.join(image_dir, image_name))
                 emb = os.path.join(test_dir, scene, "embeddings/", image_name.replace(".jpg", ".pt"))
-
                 seg = self.detector.test(img, image_name, emb)
 
                 cv2.waitKey(1)
