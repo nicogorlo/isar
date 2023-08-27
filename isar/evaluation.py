@@ -63,7 +63,7 @@ class Evaluation():
         if os.path.exists(os.path.join(self.eval_dir, image_name.replace("jpg", "npy"))):
             gt_mask = np.load(os.path.join(self.eval_dir, image_name.replace("jpg", "npy")))
         elif os.path.exists(os.path.join(self.eval_dir, image_name.replace("jpg", "png"))):
-            gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name.replace("jpg", "png")))
+            gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name.replace("jpg", "png")), -1)
         else:
             raise Exception("No ground truth mask found for image {}".format(image_name))
         return gt_mask
