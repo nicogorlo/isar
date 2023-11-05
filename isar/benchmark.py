@@ -18,11 +18,10 @@ from baseline_method import BaselineMethod
 from util.isar_utils import performance_measure
 
 class Benchmark():
-    def __init__(self, method_config_file: str, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
-        self.datasets = ['single_object', 'multi_object']
+    def __init__(self, method_config_file: str, outdir: str, datadir: str, device: str="cpu"):
+        self.datasets = ['multi_object']
         self.modes = ['single_shot', 'multi_shot']
-        self.datadir_single_obj = datadir_single_obj
-        self.datadir_multi_obj = datadir_multi_obj
+        self.datadir = datadir
 
         with open(method_config_file, 'r') as f:
             method_config = yaml.safe_load(f)
@@ -43,7 +42,7 @@ class Benchmark():
 
     "iterate over all datasets (in this version only multi_object)"
     def run(self):
-        self.stats['single_object'] = {}
+        # self.stats['single_object'] = {}
         self.stats['multi_object'] = {}
         for dataset in self.datasets:
             for mode in self.modes:
@@ -51,10 +50,8 @@ class Benchmark():
 
     def run_dataset(self, dataset: str, mode: str):
         self.dataset = dataset
-        if dataset == 'single_object':
-            self.stats[dataset][mode] = self.run_scenario(self.datadir_single_obj, single_shot=(mode == 'single_shot'))
-        elif dataset == 'multi_object':
-            self.stats[dataset][mode] = self.run_scenario(self.datadir_multi_obj, single_shot=(mode == 'single_shot'))
+        if dataset == 'multi_object':
+            self.stats[dataset][mode] = self.run_scenario(self.datadir, single_shot=(mode == 'single_shot'))
         else:
             raise Exception("Dataset {} not supported".format(dataset))
     
@@ -130,12 +127,11 @@ class Benchmark():
         return task_stats
 
 
-def main(method_config: str, outdir: str, datadir_single_object: str, datadir_multi_object: str, device: str) -> None:
+def main(method_config: str, outdir: str, datadir: str, device: str) -> None:
 
-    bm = Benchmark(method_config, outdir, datadir_single_object, datadir_multi_object, device)
+    bm = Benchmark(method_config, outdir, datadir, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.datasets = ["multi_object"]
     bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
@@ -148,12 +144,8 @@ if __name__ == "__main__":
     parser.add_argument("-mc", "--method_config", type=str, default='cfg/baseline_config.yaml', 
                         help='Path to the method config file')
     parser.add_argument(
-        "-ds", "--datadir_single_object", type=str, default="",
-        help="Path to the single object dataset"
-    )
-    parser.add_argument(
-        "-dm", "--datadir_multi_object", type=str, default="",
-        help="Path to the multi object dataset"
+        "-d", "--datadir", type=str, default="",
+        help="Path to the dataset"
     )
     parser.add_argument(
         "-o", "--outdir", type=str, default="",
@@ -165,4 +157,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    main(args.method_config, args.outdir, args.datadir_single_object, args.datadir_multi_object, args.device)
+    main(args.method_config, args.outdir, args.datadir, args.device)
