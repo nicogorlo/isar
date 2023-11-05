@@ -5,33 +5,44 @@ import json
 from pathlib import Path
 from datetime import datetime
 import argparse
+from importlib import import_module
+import yaml
 
 from evaluation import Evaluation
 
+from tqdm import tqdm
+
+from detector import GenericDetector
 from baseline_method import BaselineMethod
 
-class Benchmark():
-    def __init__(self, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
-        self.datasets = ['single_object', 'multi_object']
-        self.modes = ['single_shot', 'multi_shot']
-        self.datadir_single_obj = datadir_single_obj
-        self.datadir_multi_obj = datadir_multi_obj
+from util.isar_utils import performance_measure
 
-        self.detector = BaselineMethod(device, "vit_h", "dinov2_vitl14", use_precomputed_sam_embeddings = True, outdir = outdir)
+class Benchmark():
+    def __init__(self, method_config_file: str, outdir: str, datadir: str, device: str="cpu"):
+        self.datasets = ['multi_object']
+        self.modes = ['single_shot', 'multi_shot']
+        self.datadir = datadir
+
+        with open(method_config_file, 'r') as f:
+            method_config = yaml.safe_load(f)
+
+        module = method_config["method_class"].rsplit(".", 1)
+        Method = getattr(import_module(module[0]), module[1])
+        self.detector = Method(device = device, outdir = outdir, **method_config)
 
         self.dataset = None
         self.stats = {}
 
-        self.detector.show_images = True
+        self.detector.show_images = False
 
         self.outdir = outdir
 
         if self.detector.show_images:
             cv2.namedWindow("seg")
 
-    "iterate over all datasets (single_object, multi_object)"
+    "iterate over all datasets (in this version only multi_object)"
     def run(self):
-        self.stats['single_object'] = {}
+        # self.stats['single_object'] = {}
         self.stats['multi_object'] = {}
         for dataset in self.datasets:
             for mode in self.modes:
@@ -39,20 +50,23 @@ class Benchmark():
 
     def run_dataset(self, dataset: str, mode: str):
         self.dataset = dataset
-        if dataset == 'single_object':
-            self.stats[dataset][mode] = self.run_scenario(self.datadir_single_obj, single_shot=(mode == 'single_shot'))
-        elif dataset == 'multi_object':
-            self.stats[dataset][mode] = self.run_scenario(self.datadir_multi_obj, single_shot=(mode == 'single_shot'))
+        if dataset == 'multi_object':
+            self.stats[dataset][mode] = self.run_scenario(self.datadir, single_shot=(mode == 'single_shot'))
         else:
             raise Exception("Dataset {} not supported".format(dataset))
     
     def run_scenario(self, datadir: str, single_shot: bool = True) -> dict:
         taskdir = datadir
         dataset_stats = {}
-
+        
         for task in [i for i in sorted(os.listdir(taskdir)) if (".json" not in i)]:
-            task_stats = self.run_task(taskdir, task, single_shot=single_shot)
-            dataset_stats.update(task_stats)
+            with performance_measure(f"Task {task}"):
+                task_stats = self.run_task(taskdir, task, single_shot=single_shot)
+                task_stat_path = os.path.join(self.outdir, task, "task_stats.json")
+                with open(task_stat_path, 'w') as f:
+                    json.dump(task_stats, f, indent=4)
+                dataset_stats.update(task_stats)
+            print(f"Task {task} - stats: \n {task_stats}")
         
         return dataset_stats
     
@@ -90,19 +104,20 @@ class Benchmark():
         test_scenes = os.listdir(test_dir)
         task_stats = {}
         
-        for scene in test_scenes:
+        for scene in [i for i in test_scenes]:
             image_dir = os.path.join(test_dir, scene, "color/")
             eval_dir = os.path.join(test_dir, scene, "semantic_raw/")
             eval = Evaluation(eval_dir, info)
             ious = {}
             self.detector.on_new_test_sequence()
+            outdir_scene = os.path.join(self.outdir, task, scene)
+            self.detector.outdir = outdir_scene
+            if not os.path.exists(self.detector.outdir):
+                os.makedirs(self.detector.outdir)
+
             for image_name in sorted(os.listdir(image_dir)):
-                self.detector.outdir = os.path.join(self.outdir, task, scene)
-                if not os.path.exists(self.detector.outdir):
-                    os.makedirs(self.detector.outdir)
                 img = cv2.imread(os.path.join(image_dir, image_name))
                 emb = os.path.join(test_dir, scene, "embeddings/", image_name.replace(".jpg", ".pt"))
-
                 seg = self.detector.test(img, image_name, emb)
 
                 cv2.waitKey(1)
@@ -112,12 +127,11 @@ class Benchmark():
         return task_stats
 
 
-def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, device: str) -> None:
+def main(method_config: str, outdir: str, datadir: str, device: str) -> None:
 
-    bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
+    bm = Benchmark(method_config, outdir, datadir, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
-    bm.run_dataset('multi_object', 'multi_shot')
     bm.run()
     stat_path = os.path.join(bm.outdir, f"stats_isar_benchmark_{now_str}.json")
     Path(stat_path).touch(exist_ok=True)
@@ -125,15 +139,13 @@ def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, dev
         json.dump(bm.stats, f, indent=4)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a DAVIS and a Habitat dataset")
-
+    parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a given dataset")
+    
+    parser.add_argument("-mc", "--method_config", type=str, default='cfg/baseline_config.yaml', 
+                        help='Path to the method config file')
     parser.add_argument(
-        "-ds", "--datadir_single_object", type=str, default="",
-        help="Path to the single object dataset"
-    )
-    parser.add_argument(
-        "-dm", "--datadir_multi_object", type=str, default="",
-        help="Path to the multi object dataset"
+        "-d", "--datadir", type=str, default="",
+        help="Path to the dataset"
     )
     parser.add_argument(
         "-o", "--outdir", type=str, default="",
@@ -145,4 +157,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    main(args.outdir, args.datadir_single_object, args.datadir_multi_object, args.device)
+    main(args.method_config, args.outdir, args.datadir, args.device)

@@ -5,6 +5,8 @@ from typing import List, Tuple
 import cv2
 import pickle
 import json
+import random
+import colorsys
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from scipy.ndimage import maximum_filter, generate_binary_structure, iterate_structure, binary_erosion
@@ -26,10 +28,11 @@ class BaselineMethod(GenericDetector):
 
         #configurable parameters:
         self.start_reid = False
-        self.show_images = True
+        self.show_images = False
         self.device = device
         self.outdir = outdir
 
+        self.save_embeddings = False
         # SAM model:
         sam_checkpoint = os.path.join('modelzoo', [i for i in os.listdir('modelzoo') if sam_model_type in i][0])
         self.use_precomputed_sam_embedding = use_precomputed_sam_embeddings
@@ -70,6 +73,9 @@ class BaselineMethod(GenericDetector):
 
         self.color_map = {}
 
+        self.palette = None
+        self.debug_dir = os.path.join(self.outdir, "debug")
+
     def on_new_task(self, info: dict):
         self.info = info
         self.color_map = info["color_map"]
@@ -94,6 +100,8 @@ class BaselineMethod(GenericDetector):
                     scene_prompts[int(semantic_id)].update({os.path.join(train_dir, scene, "color/", img + ".jpg"): prompt[semantic_id]})
             prompts_rearranged.update(scene_prompts)
         
+        pal = self.generate_color_palette(len(semantic_ids))
+        self.palette = {semantic_ids[i]: pal[i] for i in range(len(semantic_ids))}
         
         for semantic_id in semantic_ids:
             prompts_class = prompts_rearranged[semantic_id]
@@ -115,9 +123,6 @@ class BaselineMethod(GenericDetector):
 
                 mask = self.initial_sam_prediction(0, 0, img_square, img, embeddings_sam[idx], None, list(prompts_class.values())[idx]) 
 
-                cv2.imshow("seg", 
-                           cv2.resize(cv2.addWeighted(img_square.astype("uint8"), 0.3, self.show_mask(mask).astype("uint8"), 0.7, 0), (img.shape[1],img.shape[0])))
-                cv2.waitKey(1)
                 
                 tensor_in = self.preprocess_image_dino(img)
 
@@ -167,7 +172,7 @@ class BaselineMethod(GenericDetector):
 
             for semantic_id in sorted(list(self.svms.keys())):
                 out, svm_predictions = self.predict_svm(img_features, img, semantic_id)
-                mask_info[semantic_id] = (out, svm_predictions) / self.margins[semantic_id]
+                mask_info[semantic_id] = (out, svm_predictions / self.margins[semantic_id])
 
             combined_mask = self.predict_multi(img_features, img_square)
 
@@ -182,7 +187,6 @@ class BaselineMethod(GenericDetector):
 
             if self.show_images:
                 cv2.imshow("seg", dst)
-
             cv2.waitKey(int(1000/30))
             cv2.imwrite(os.path.join(self.outdir, image_name), dst)
 
@@ -213,21 +217,21 @@ class BaselineMethod(GenericDetector):
 
     def predict_multi(self, img_features: torch.Tensor, img_square: np.ndarray):
 
-        def calculate_reward(prediction_array, mask):
+        def calculate_reward(prediction_array: np.ndarray, mask: np.ndarray, prompt_points: list):
             return (prediction_array * mask).sum()
         
-        def create_reward_matrix(predictions_dict, masks):
+        def create_reward_matrix(predictions_dict: dict, masks: list, prompt_points: dict):
             reward_matrix = []
             for semantic_id, prediction_array in predictions_dict.items():
                 reward_row = []
                 for mask in masks:
-                    reward_row.append(calculate_reward(prediction_array, mask))
+                    reward_row.append(calculate_reward(prediction_array, mask, prompt_points[semantic_id]))
                 reward_matrix.append(reward_row)
                 
             return reward_matrix
         
-        def assign_masks(predictions_dict, masks):
-            reward_matrix = create_reward_matrix(predictions_dict, masks)
+        def assign_masks(predictions_dict: dict, masks: list, prompt_points: dict):
+            reward_matrix = create_reward_matrix(predictions_dict, masks, prompt_points)
             row_ind, col_ind = linear_sum_assignment(reward_matrix, maximize = True)
             return ({list(predictions_dict.keys())[i]: masks[j] for i, j in zip(row_ind, col_ind)},
                     {list(predictions_dict.keys())[i]: reward_matrix[i][j] for i, j in zip(row_ind, col_ind)})
@@ -249,28 +253,27 @@ class BaselineMethod(GenericDetector):
             else:
                 out[semantic_id] = np.zeros_like(out[semantic_id], bool)
 
-        prompt_points = []
-        prompt_labels = []
+        prompt_points = {}
         for semantic_id, svm_prediction in svm_predictions.items():
-            prompt_point_id, _ = self.get_sam_prompts(svm_prediction.reshape((self.upsampled_h, self.upsampled_w)), out[semantic_id])
-            prompt_points.append(prompt_point_id)
+            prompt_point_id, _ = self.get_sam_prompts(svm_prediction, out[semantic_id])
+            prompt_points[semantic_id] = prompt_point_id
 
-        prompt_points = np.concatenate(prompt_points, axis = 0).astype(np.float64)
+        all_prompt_points = np.concatenate(list(prompt_points.values()), axis = 0).astype(np.float64)
 
-        prompt_points[:,0] /= self.upsampled_w
-        prompt_points[:, 1] /= self.upsampled_h
+        all_prompt_points[:,0] /= self.upsampled_w
+        all_prompt_points[:, 1] /= self.upsampled_h
 
-        mask_generator = SingleCropMaskGenerator(self.sam_predictor, points_per_side = None, point_grids=[prompt_points])
+        mask_generator = SingleCropMaskGenerator(self.sam_predictor, points_per_side = None, point_grids=[all_prompt_points])
         mask_data = mask_generator.generate(img_square)
 
         masks = [mask["segmentation"] for mask in mask_data]
 
         combined_mask = np.zeros((self.upsampled_h, self.upsampled_w), dtype=np.int)
 
-        assigned_masks, avg_preds = assign_masks(svm_predictions, masks)
+        assigned_masks, avg_preds = assign_masks(svm_predictions, masks, prompt_points)
 
         for semantic_id, pred in sorted(avg_preds.items(), key = lambda x: x[1]):
-            if out[semantic_id].sum() == 0 or svm_predictions[semantic_id][assigned_masks[semantic_id]].sum() < 0.0:
+            if svm_predictions[semantic_id][assigned_masks[semantic_id]].sum() < 0.0:
                 continue
             combined_mask[assigned_masks[semantic_id]] = semantic_id
 
@@ -413,11 +416,12 @@ class BaselineMethod(GenericDetector):
             else:
                 self.sam_predictor.set_image(image, image_format='BGR')
 
-                if not os.path.exists(os.path.split(embedding)[0]):
-                    os.makedirs(os.path.split(embedding)[0])
+                if self.save_embeddings:
+                    if not os.path.exists(os.path.split(embedding)[0]):
+                        os.makedirs(os.path.split(embedding)[0])
 
-                features = self.sam_predictor.get_image_embedding()
-                torch.save(features, embedding)
+                    features = self.sam_predictor.get_image_embedding()
+                    torch.save(features, embedding)
         else:
             self.sam_predictor.set_image(image, image_format='BGR')
 
@@ -561,7 +565,13 @@ class BaselineMethod(GenericDetector):
         svm_dist[margin, 2] = 1.0
         svm_dist[margin2, 1] = 1.0
         
-        cv2.imshow("SVM Dist", cv2.addWeighted(img, 0.2, (svm_dist*255).astype("uint8"), 0.8, 0.0))
+    def generate_color_palette(self, num_colors):
+        random.seed(42) 
+        hsv_tuples = [(x / num_colors, 1., 1.) for x in range(num_colors)]
+        random.shuffle(hsv_tuples)
+        rgb_tuples = map(lambda x: tuple(int(255 * i) for i in colorsys.hsv_to_rgb(*x)), hsv_tuples)
+        bgr_tuples = map(lambda x: (x[2], x[1], x[0]), rgb_tuples)
+        return list(bgr_tuples)
     
     def sam_refinement(self, 
                        img: np.ndarray, 

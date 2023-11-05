@@ -62,6 +62,8 @@ class Evaluation():
     def get_gt_mask(self, image_name):
         if os.path.exists(os.path.join(self.eval_dir, image_name.replace("jpg", "npy"))):
             gt_mask = np.load(os.path.join(self.eval_dir, image_name.replace("jpg", "npy")))
+        elif os.path.exists(os.path.join(self.eval_dir, image_name.replace("jpg", "png"))):
+            gt_mask = cv2.imread(os.path.join(self.eval_dir, image_name.replace("jpg", "png")), -1)
         else:
             raise Exception("No ground truth mask found for image {}".format(image_name))
         return gt_mask
@@ -140,15 +142,16 @@ class Evaluation():
             self.mIoU[id] = np.mean(list(self.ious[id].values()))
             self.mBoundF[id] = np.mean(list(self.bound_f_measures[id].values()))
             if self.total_frames_visible[id] == 0:
-                false_detection_rate_visible[id] = None
+                false_detection_rate_visible[id] = 0.0
             else:
                 false_detection_rate_visible[id] = self.false_detection_visible[id] / self.total_frames_visible[id]
             if self.total_frames_not_visible[id] == 0:
-                false_detection_rate_not_visible[id] = None
+                false_detection_rate_not_visible[id] = 0.0
             else:
                 false_detection_rate_not_visible[id] = self.false_detection_not_visible[id] / self.total_frames_not_visible[id]
             
-            misclassification_rate[id] = self.misclassifications[id]/len(self.ious[id])
+            if len(self.ious[id]) > 0: 
+                misclassification_rate[id] = self.misclassifications[id]/len(self.ious[id])
 
         scene_miou = np.mean(list(self.mIoU.values()))
         scene_mboundf = np.mean(list(self.mBoundF.values()))

@@ -18,7 +18,7 @@ def generate_color_palette(num_colors):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description="Precompute image embeddings")
+    parser = argparse.ArgumentParser(description="Store Task Info")
     parser.add_argument("--datadir", type=str, default="")
     args = parser.parse_args()
 
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     info = {}
     prompts = {}
 
-    for task in [i for i in sorted(os.listdir(datadir)) if i == "cheezit"]:
+    for task in [i for i in sorted(os.listdir(datadir))]:
         color_map = {}
         prompts = {}
         for file in Path(os.path.join(datadir, task)).rglob('prompts_multi.json'):

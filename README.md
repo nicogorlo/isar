@@ -35,8 +35,8 @@ dataset release pending
 
 CLI arguments:
 
-* ds, datadir_single_object - path to directory of single object dataset
-* dm, datadir_multi_object - path to directory of multi object dataset
+* mc, method_config - path to method config file
+* d, datadir - path to directory of dataset
 * o, outdir - path to output directory
 * -dev, device - device to use. Choices: ["cpu", "cuda"]
 
