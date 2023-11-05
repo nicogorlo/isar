@@ -5,23 +5,31 @@ import json
 from pathlib import Path
 from datetime import datetime
 import argparse
+from importlib import import_module
+import yaml
 
 from evaluation import Evaluation
 
 from tqdm import tqdm
 
+from detector import GenericDetector
 from baseline_method import BaselineMethod
 
 from util.isar_utils import performance_measure
 
 class Benchmark():
-    def __init__(self, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
+    def __init__(self, method_config_file: str, outdir: str, datadir_single_obj: str, datadir_multi_obj: str, device: str="cpu"):
         self.datasets = ['single_object', 'multi_object']
         self.modes = ['single_shot', 'multi_shot']
         self.datadir_single_obj = datadir_single_obj
         self.datadir_multi_obj = datadir_multi_obj
 
-        self.detector = BaselineMethod(device, "vit_h", "dinov2_vitl14", use_precomputed_sam_embeddings = True, outdir = outdir)
+        with open(method_config_file, 'r') as f:
+            method_config = yaml.safe_load(f)
+
+        module = method_config["method_class"].rsplit(".", 1)
+        Method = getattr(import_module(module[0]), module[1])
+        self.detector = Method(device = device, outdir = outdir, **method_config)
 
         self.dataset = None
         self.stats = {}
@@ -33,7 +41,7 @@ class Benchmark():
         if self.detector.show_images:
             cv2.namedWindow("seg")
 
-    "iterate over all datasets (single_object, multi_object)"
+    "iterate over all datasets (in this version only multi_object)"
     def run(self):
         self.stats['single_object'] = {}
         self.stats['multi_object'] = {}
@@ -122,9 +130,9 @@ class Benchmark():
         return task_stats
 
 
-def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, device: str) -> None:
+def main(method_config: str, outdir: str, datadir_single_object: str, datadir_multi_object: str, device: str) -> None:
 
-    bm = Benchmark(outdir, datadir_single_object, datadir_multi_object, device)
+    bm = Benchmark(method_config, outdir, datadir_single_object, datadir_multi_object, device)
     now = datetime.now()
     now_str = now.strftime("%Y_%m_%d_%H%M%S")
     bm.datasets = ["multi_object"]
@@ -136,7 +144,9 @@ def main(outdir: str, datadir_single_object: str, datadir_multi_object: str, dev
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark, computes evaluation metrics for a given dataset")
-
+    
+    parser.add_argument("-mc", "--method_config", type=str, default='cfg/baseline_config.yaml', 
+                        help='Path to the method config file')
     parser.add_argument(
         "-ds", "--datadir_single_object", type=str, default="",
         help="Path to the single object dataset"
@@ -155,4 +165,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     
-    main(args.outdir, args.datadir_single_object, args.datadir_multi_object, args.device)
+    main(args.method_config, args.outdir, args.datadir_single_object, args.datadir_multi_object, args.device)

@@ -142,11 +142,11 @@ class Evaluation():
             self.mIoU[id] = np.mean(list(self.ious[id].values()))
             self.mBoundF[id] = np.mean(list(self.bound_f_measures[id].values()))
             if self.total_frames_visible[id] == 0:
-                false_detection_rate_visible[id] = None
+                false_detection_rate_visible[id] = 0.0
             else:
                 false_detection_rate_visible[id] = self.false_detection_visible[id] / self.total_frames_visible[id]
             if self.total_frames_not_visible[id] == 0:
-                false_detection_rate_not_visible[id] = None
+                false_detection_rate_not_visible[id] = 0.0
             else:
                 false_detection_rate_not_visible[id] = self.false_detection_not_visible[id] / self.total_frames_not_visible[id]
             

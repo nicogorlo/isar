@@ -19,7 +19,7 @@ def generate_color_palette(num_colors):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Store Task Info")
-    parser.add_argument("--datadir", type=str, default="/home/nico/semesterproject/data/re-id_benchmark_ycb/multi_object")
+    parser.add_argument("--datadir", type=str, default="")
     args = parser.parse_args()
 
     datadir = args.datadir

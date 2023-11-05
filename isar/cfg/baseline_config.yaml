@@ -1,0 +1,4 @@
+method_class: baseline_method.BaselineMethod
+sam_model_type: vit_h
+dino_model_type: dinov2_vitl14
+use_precomputed_sam_embeddings: true

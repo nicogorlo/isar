@@ -1,13 +1,15 @@
 import numpy as np
 import cv2
 import os
+from typing import Optional
+from abc import ABC, abstractmethod
 
 import torch
 from torch import nn
 import torchvision.transforms as T
 torch.set_grad_enabled(False)
 
-class GenericDetector():
+class GenericDetector(ABC):
     """
     Generic Detector class
     functions are called in benchmark.py, are meant to be overwritten in child classes
@@ -15,6 +17,7 @@ class GenericDetector():
     def __init__(self, *args, **kwargs):
         self.device = kwargs.get("device", "cpu")
 
+    @abstractmethod
     def train(self, train_dir: str, train_scenes: list, semantic_ids: list, prompts: dict) -> None:
         """
         train a method
@@ -50,7 +53,8 @@ class GenericDetector():
         print("new test sequence")
         return
     
-    def test(self, img: np.ndarray, image_name: str) -> np.ndarray:
+    @abstractmethod
+    def test(self, img: np.ndarray, image_name: str, embedding: str = '') -> np.ndarray:
         """
         called sequentially for every image in a test sequence
 

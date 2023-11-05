@@ -9,6 +9,9 @@
             "type": "python",
             "request": "launch",
             "program": "${cwd}/benchmark.py",
+            "args": ["-ds", "",
+            "-dm", "",
+            "-o", "", "-dev", "cpu"],
             "console": "integratedTerminal",
             "justMyCode": true
         }
