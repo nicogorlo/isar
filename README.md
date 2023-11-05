@@ -52,7 +52,7 @@ The easiest way to test a new method on the dataset and recieve results in the s
 the datasets are structured as follows:
 
 Dataset_name <br>
-|--single_object/multi_object <br>
+|--multi_object <br>
 --|--task_name <br>
 ----|--info.json (task info) <br>
 ----|--train <br>
@@ -84,7 +84,7 @@ Dataset_name <br>
 -----------|--xxxxxxx.png <br>
 -----------|-- ... <br>
 --------|--semantic_raw (this is used for eval) <br>
------------|--xxxxxxx.npy <br>
+-----------|--xxxxxxx.png <br>
 -----------|-- ... <br>
 ------|-- ... <br>
 --|-- ... <br>
